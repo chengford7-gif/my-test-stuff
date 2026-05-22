@@ -1,53 +1,26 @@
-import time
 import requests
 from datetime import datetime
 
-# 配置你想抓取的股票代码 (IREN)
 STOCK_SYMBOL = "IREN"
 
-print(f"🚀 智能股价监控机器人已启动... 开始实时监测 {STOCK_SYMBOL} 股价")
-print("提示：美股盘中时间才会高频更新，当前为测试循环获取模式。")
-print("-" * 50)
-
 def get_realtime_price(symbol):
-    """
-    通过免费开源接口获取美股实时价格
-    """
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
-    # 模拟浏览器请求头，防止被网站拦截
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-    }
-    
+    headers = {'User-Agent': 'Mozilla/5.0'}
     try:
         response = requests.get(url, headers=headers, timeout=10)
         data = response.json()
-        
-        # 解析返回的 JSON 数据
         meta = data['chart']['result'][0]['meta']
-        current_price = meta['regularMarketPrice']
-        currency = meta['currency']
-        
-        return current_price, currency
+        return meta['regularMarketPrice'], meta['currency']
     except Exception as e:
-        print(f"❌ 抓取数据失败: {e}")
+        print(f"❌ 抓取失败: {e}")
         return None, None
 
-# 开启无限循环，每 60 秒抓取一次
-try:
-    while True:
-        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        price, currency = get_realtime_price(STOCK_SYMBOL)
-        
-        if price:
-            print(f"[{now}] 📊 {STOCK_SYMBOL} 当前最新股价: {price} {currency}")
-            
-            # 这里是扩展接口：
-            # 💡 你可以在这里加入 Elliott Wave 或者是 1 分钟/5 分钟线策略逻辑
-            # 💡 例如：if price < 某个支撑位: 触发报警
-        
-        # 暂停 60 秒后继续下一次抓取
-        time.sleep(60)
-
-except KeyboardInterrupt:
-    print("\n🛑 机器人已安全停止运行。")
+price, currency = get_realtime_price(STOCK_SYMBOL)
+if price:
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    log_message = f"[{now}] 📊 {STOCK_SYMBOL} 最新股价: {price} {currency}\n"
+    print(log_message)
+    
+    # 把数据追加写入到本地的一个文本里
+    with open("data_log.txt", "a", encoding="utf-8") as f:
+        f.write(log_message)
