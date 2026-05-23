@@ -4,10 +4,9 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 
-# 🎯 狙击自选股列表与策略初始资金
+# 🎯 狙击自选股列表与风险比例配置
 WATCH_LIST = ["IREN", "BMNR"]
-STRATEGY_CAPITAL = 250000.0  # 注入 250,000 USD 試錯資金
-MAX_RISK_PERCENT = 0.02      # 单笔最大允许亏损总资金的 2% (即 5,000 USD)
+TOTAL_RISK_LIMIT_PCT = 0.02  # R%: 单笔看错时，允许亏损总资产 A 的最大百分比 (2%)
 
 def get_historical_k_data(symbol):
     """拉取最近 90 天的日 K 线数据"""
@@ -41,27 +40,27 @@ def find_recent_wave_bounds(df, window=5):
     local_minima = df[df['is_local_min']].sort_values(by='date', ascending=False)
     
     if local_maxima.empty or local_minima.empty:
-        return df['high'].max(), df['low'].min(), "全局极端空间"
+        return float(df['high'].max()), float(df['low'].min()), "全局极端空间"
         
-    recent_high = local_maxima['high'].iloc[0]
-    recent_low = local_minima['low'].iloc[0]
+    recent_high = float(local_maxima['high'].iloc[0])
+    recent_low = float(local_minima['low'].iloc[0])
     
     return recent_high, recent_low, f"近代滑动窗口波段(窗口半径:{window}天)"
 
 # 初始化本次扫描
 now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-log_content = f"\n================ 💰 狙击手风控与仓位量化雷达 ({now}) ================\n"
+log_content = f"\n================ 📐 纯比例矩阵狙击雷达 ({now}) ================\n"
 
 for symbol in WATCH_LIST:
     df = get_historical_k_data(symbol)
     if df is None or df.empty:
         continue
         
-    current_price = df['close'].iloc[-1]
-    current_volume = df['volume'].iloc[-1]
+    current_price = float(df['close'].iloc[-1])
+    current_volume = float(df['volume'].iloc[-1])
     
     # 计算过去 5 天的平均成交量
-    avg_volume_5d = df['volume'].iloc[-6:-1].mean()
+    avg_volume_5d = float(df['volume'].iloc[-6:-1].mean())
     volume_ratio = current_volume / avg_volume_5d if avg_volume_5d > 0 else 1.0
     
     # 算法识别近代浪头和浪底
@@ -77,44 +76,43 @@ for symbol in WATCH_LIST:
     take_profit_1 = wave_high
     take_profit_2 = wave_high + (wave_height * 0.618)
     
-    # 💥 【动态仓位核心算法】
-    # 允许亏损的绝对金额 (5000 USD)
-    allowed_risk_amt = STRATEGY_CAPITAL * MAX_RISK_PERCENT
-    # 每股风险距离
-    risk_per_share = current_price - hard_stop_loss
+    # 💥【核心：动态加仓资金比率计算】
+    # 股价到止损线的跌幅比率
+    price_to_sl_pct = (current_price - hard_stop_loss) / current_price
     
-    if risk_per_share > 0:
-        # 严格根据止损距离反推可买股数，并向下取整到 100 股（美股整手）
-        suggested_shares = int((allowed_risk_amt / risk_per_share) // 100 * 100)
-        required_margin = suggested_shares * current_price
+    if price_to_sl_pct > 0:
+        # P% = 总资产风险比率 / 单股风险跌幅比率
+        position_allocation_pct = TOTAL_RISK_LIMIT_PCT / price_to_sl_pct
+        # 做个安全边界上限，单股加仓总额不跨越总资产的 50%
+        if position_allocation_pct > 0.50:
+            position_allocation_pct = 0.50
     else:
-        suggested_shares = 0
-        required_margin = 0
-    
+        position_allocation_pct = 0.0
+        
     status_msg = f"[{symbol}] 当前价: ${current_price:.2f} | 量比: {volume_ratio:.2f}\n"
     status_msg += f"       🎯 战术空间 -> 埋伏带: ${fib_618_target:.2f}-${fib_500_target:.2f} | 止损线: ${hard_stop_loss:.2f}\n"
-    status_msg += f"       📈 预期回报 -> 保守目标(TP1): ${take_profit_1:.2f} | 爆发目标(TP2): ${take_profit_2:.2f}\n"
+    status_msg += f"       📈 预期回报 -> 保守前高(TP1): ${take_profit_1:.2f} | 爆发五浪(TP2): ${take_profit_2:.2f}\n"
     
-    # 🔍 包含仓位管理的决策树
+    # 🔍 包含比例管理的决策树
     if fib_618_target <= current_price <= fib_500_target:
         if volume_ratio <= 0.85:
             potential_reward = take_profit_2 - current_price
-            rr_ratio = potential_reward / risk_per_share if risk_per_share > 0 else 0
+            rr_ratio = potential_reward / (current_price - hard_stop_loss) if (current_price - hard_stop_loss) > 0 else 0
             
             decision = f"       🚨【🔥 信号触发：授权开火 】价格切入黄金坑且缩量洗盘！\n"
             decision += f"           📊 实时风报比: {rr_ratio:.2f} : 1\n"
-            decision += f"           💰 战术仓位指令 -> 建议买入: {suggested_shares} 股 | 预计动用资金: ${required_margin:,.2f}\n"
-            decision += f"           ⚠️ 铁律：若下破 ${hard_stop_loss:.2f} 坚决割肉，此单坚决控亏在 ${allowed_risk_amt:,.2f} USD 内！\n"
+            decision += f"           📊 战术加仓权重 -> 动用现金 A 的 {position_allocation_pct*100:.2f}% 换算成股票切入底仓！\n"
+            decision += f"           ⚠️ 铁律：下破 ${hard_stop_loss:.2f} 坚决割肉，本单对总资产的整体回撤严格锁死在 {TOTAL_RISK_LIMIT_PCT*100:.1f}%！\n"
         else:
-            decision = f"       ⏳【观察】价格已到埋伏圈，但量比({volume_ratio:.2f})未见缩量，有放量砸盘风险，暂不开火。\n"
+            decision = f"       ⏳【观察】价格已到埋伏圈，但量比({volume_ratio:.2f})未见缩量，暂不开火。\n"
     elif current_price < fib_618_target:
         if current_price <= hard_stop_loss:
-            decision = f"       💀 [🚨 警报] 股价已跌破铁损线(${hard_stop_loss:.2f})！形态彻底走坏，若持有请无条件斩仓！\n"
+            decision = f"       💀 [🚨 警报] 股价已跌破铁损线(${hard_stop_loss:.2f})！形态走坏，若持有请无条件 100% 斩仓！\n"
         else:
-            decision = f"       ⚠️【破位】已跌破 61.8% 强支撑，数浪机制面临失效，关闭保险静观其变。\n"
+            decision = f"       ⚠️【破位】已跌破 61.8% 强支撑，数浪机制面临失效，静观其变。\n"
     else:
-        # 即使在潜伏期，也预先演算如果现在强行买入所需的仓位，做个对比
-        decision = f"       🟢【买点潜伏中】距离埋伏圈上轨还差 ${current_price - fib_500_target:.2f}。若此时强行开仓，技术止损过宽，不符合狙击纪律。\n"
+        decision = f"       🟢【买点潜伏中】距离埋伏圈上轨还差 ${current_price - fib_500_target:.2f}。\n"
+        decision += f"           ℹ️ 演练参考 -> 若当前强行建仓，依规仅允许动用现金 A 的 {position_allocation_pct*100:.2f}%，资金效率极低。\n"
         
     print(status_msg + decision)
     log_content += status_msg + decision
@@ -124,4 +122,4 @@ log_content += "="*65 + "\n"
 # 存回云端数据库
 with open("data_log.txt", "a", encoding="utf-8") as f:
     f.write(log_content)
-print("📊 仓位风控完全体战报已写入 data_log.txt")
+print("📊 纯比例控盘战报已安全存回")
