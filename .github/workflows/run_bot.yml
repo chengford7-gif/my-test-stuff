@@ -2,34 +2,42 @@ name: IREN Price Catcher
 
 on:
   schedule:
-    # 意思是每 5 分钟自动运行一次（GitHub Action 定时触发有一定延迟，最短建议5分钟）
-    - cron: '*/5 * * * *'
-  workflow_dispatch: # 允许你在网页上手动点击运行
+    - cron: '*/15 * * * *' # 调整为每15分钟运行一次，更安全，防封IP
+  workflow_dispatch: 
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+    # 升级到最新且长期支持的 v4 版本，完美适配 Node.js 24 架构
     - name: 检查仓库代码
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
+    # 升级到最新的 v5 版本，彻底解决 Python 环境在云端沙盒的隔离问题
     - name: 设置 Python 环境
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.10'
+        cache: 'pip' # 开启云端缓存，加速之后的运行速度
 
-    - name: 安装依赖联网库
+    - name: 升级基础工具并强制安装依赖
       run: |
-        pip install requests
+        python -m pip install --upgrade pip
+        pip install requests pandas numpy
 
-    - name: 运行监控脚本
+    - name: 运行形态学狙击脚本
       run: |
         python catcher
 
-    - name: 自动把抓到的股价数据存回 GitHub 仓库
+    - name: 自动将狙击战报安全存回仓库
       run: |
         git config --global user.name 'GitHub Actions Bot'
         git config --global user.email 'actions@github.com'
+        # 确保哪怕文件没有发生变动，也不会因为 git commit 空提交而导致报错死机
         git add data_log.txt || true
-        git commit -m "自动更新 IREN 股价数据" || true
-        git push || true
+        if git diff --staged --quiet; then
+          echo "战报数据未发生变动，跳过提交。"
+        else
+          git commit -m "自动更新近代形态学狙击雷达战报"
+          git push
+        fi
