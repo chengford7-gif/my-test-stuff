@@ -22,9 +22,10 @@ jobs:
         python -m pip install --upgrade pip
         pip install requests pandas numpy matplotlib
 
-    - name: 运行形态学狙击脚本并注入微信密钥
+    - name: 运行形态学狙击脚本并注入密钥
       env:
-        SERVER_CHAN_KEY: ${{ secrets.SERVER_CHAN_KEY }}
+        TG_TOKEN: ${{ vars.TG_TOKEN }}      # 💥 注入刚刚在面板配好的 Telegram 机器人密钥
+        TG_CHAT_ID: ${{ vars.TG_CHAT_ID }}  # 💥 注入你的个人 TG ID 
       run: |
         python3 catcher
 
