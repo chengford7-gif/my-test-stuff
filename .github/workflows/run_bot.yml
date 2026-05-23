@@ -33,3 +33,8 @@ jobs:
         git add data_log.txt iren_matrix.png || true
         git commit -m "自动更新近代形态学狙击雷达战报与核心走势图" || true
         git push
+    - name: 运行形态学狙击脚本
+      env:
+        SERVER_CHAN_KEY: ${{ secrets.SERVER_CHAN_KEY }}  # 💥 注入微信密钥环境变量
+      run: |
+        python3 catcher
