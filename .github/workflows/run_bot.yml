@@ -2,8 +2,8 @@ name: IREN Price Catcher
 
 on:
   schedule:
-    - cron: '*/15 * * * *' # 每 15 分钟全自动扫描一次
-  workflow_dispatch: # 允许手动点击运行
+    - cron: '0 */4 * * *' # 每 4 小时在云端无人值守全自动扫描一次
+  workflow_dispatch: # 核心：允许你在任何账号的手机 GitHub App 上随时随地点击按钮手动冲锋刷新
 
 jobs:
   build:
@@ -17,22 +17,20 @@ jobs:
       with:
         python-version: '3.10'
 
-    - name: 强制安装数学、网络与核心绘图依赖
+    - name: 极速安装数学与核心绘图依赖
       run: |
         python -m pip install --upgrade pip
         pip install requests pandas numpy matplotlib
 
-    - name: 运行形态学狙击脚本并注入密钥
-      env:
-        TG_TOKEN: ${{ vars.TG_TOKEN }}      # 💥 注入刚刚在面板配好的 Telegram 机器人密钥
-        TG_CHAT_ID: ${{ vars.TG_CHAT_ID }}  # 💥 注入你的个人 TG ID 
+    - name: 极速运行形态学狙击
       run: |
         python3 catcher
 
-    - name: 自动将战报与实战走势图同步推回仓库
+    - name: 自动同步战报与实战走势图回仓库
       run: |
         git config --global user.name "GitHub Actions Bot"
         git config --global user.email "actions@github.com"
+        # 核心：将本地算好的 data_log.txt 面板和 iren_matrix.png 图片强制推回你的主仓库
         git add data_log.txt iren_matrix.png || true
         git commit -m "自动更新近代形态学狙击雷达战报与核心走势图" || true
         git push
