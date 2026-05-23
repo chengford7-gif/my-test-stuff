@@ -4,9 +4,8 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 import os
-import io
 
-# 💥 强制切换 matplotlib 为 Headless 渲染模式
+# 💥 强制切换 matplotlib 为 Headless 渲染模式，防止在云端 Linux 服务器上因找不到显示硬件而报错
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -46,15 +45,15 @@ def find_recent_wave_bounds(df, window=5):
 
 def generate_trend_and_forecast_chart(df, wave_high, fib_500, fib_618, hard_loss, tp2):
     plot_df = df.tail(60).copy()
-    fig, ax = plt.subplots(figsize=(10, 5.5))
+    fig, ax = plt.subplots(figsize=(11, 5.5)) # 完美适配 GitHub 网页与手机 App 的原生横屏显示比例
     
-    # 绘制实盘线
+    # 绘制历史收盘实盘线
     ax.plot(plot_df['date'], plot_df['close'], label='IREN Close Price', color='#1f77b4', linewidth=2.5)
     latest_date = plot_df['date'].iloc[-1]
     latest_close = plot_df['close'].iloc[-1]
     ax.scatter(latest_date, latest_close, color='red', s=70, zorder=5)
 
-    # 空间矩阵轨道
+    # 艾略特空间矩阵轨道
     ax.axhline(y=wave_high, color='orange', linestyle='--', alpha=0.5, label=f'TP1 / Wave3 High (${wave_high:.2f})')
     ax.axhline(y=fib_500, color='gold', linestyle=':', alpha=0.5, label=f'Fib 50.0% (${fib_500:.2f})')
     ax.axhline(y=fib_618, color='g', linestyle=':', alpha=0.5, label=f'Fib 61.8% Entry (${fib_618:.2f})')
@@ -62,7 +61,7 @@ def generate_trend_and_forecast_chart(df, wave_high, fib_500, fib_618, hard_loss
     ax.axhline(y=tp2, color='purple', linestyle='-.', alpha=0.6, label=f'TP2 Wave5 Ext (${tp2:.2f})')
     ax.fill_between(plot_df['date'], fib_618, fib_500, color='green', alpha=0.06)
     
-    # 构建未来 15 日的五浪上攻预测曲线
+    # 构建未来 15 日的五浪上攻预测曲线轨迹
     forecast_dates = [latest_date + timedelta(days=i) for i in range(1, 16)]
     time_steps = np.linspace(0, 1, len(forecast_dates))
     forecast_path = latest_close + (tp2 - latest_close) * time_steps + 3 * np.sin(time_steps * np.pi * 1.5)
@@ -75,32 +74,11 @@ def generate_trend_and_forecast_chart(df, wave_high, fib_500, fib_618, hard_loss
     ax.legend(loc='upper left')
     fig.autofmt_xdate()
     
-    # 🔥 核心改变：不通过任何图床，图片直接吐进内存流，准备由 Telegram 原生直传
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png', dpi=130, bbox_inches='tight')
-    buf.seek(0)
+    # 直接保存在工作区，等待 GitHub Actions 自动推回仓库核心目录
+    plt.savefig('iren_matrix.png', dpi=150, bbox_inches='tight')
     plt.close()
-    return buf
 
-def send_telegram_radar(caption, photo_buffer):
-    """利用 Telegram Bot API 直接打包发送本地图片和说明，彻底告别卡顿"""
-    token = os.environ.get('TG_TOKEN')
-    chat_id = os.environ.get('TG_CHAT_ID')
-    if not token or not chat_id:
-        print("⚠️ 未配置 TG_TOKEN 或 TG_CHAT_ID，跳过 Telegram 推送。")
-        return
-        
-    url = f"https://api.telegram.org/bot{token}/sendPhoto"
-    files = {'photo': ('iren_matrix.png', photo_buffer, 'image/png')}
-    data = {'chat_id': chat_id, 'caption': caption, 'parse_mode': 'Markdown'}
-    
-    try:
-        res = requests.post(url, data=data, files=files, timeout=15)
-        print(f"📲 Telegram 推送响应结果: {res.text}")
-    except Exception as e:
-        print(f"❌ Telegram 推送失败: {e}")
-
-# 执行量化
+# 执行核心量化逻辑
 df = get_historical_k_data(SYMBOL)
 if df is not None and not df.empty:
     current_price = float(df['close'].iloc[-1])
@@ -117,28 +95,36 @@ if df is not None and not df.empty:
     hard_stop_loss = wave_low - (wave_height * 0.05)
     take_profit_2 = wave_high + (wave_height * 0.618)
     
-    # 在内存中画出带五浪预测轨道的雷达图
-    photo_buf = generate_trend_and_forecast_chart(df, wave_high, fib_500_target, fib_618_target, hard_stop_loss, take_profit_2)
+    # 1. 刷新高清时空轨道大图
+    generate_trend_and_forecast_chart(df, wave_high, fib_500_target, fib_618_target, hard_stop_loss, take_profit_2)
     
     price_to_sl_pct = (current_price - hard_stop_loss) / current_price
     position_allocation_pct = min(TOTAL_RISK_LIMIT_PCT / price_to_sl_pct, 0.50) if price_to_sl_pct > 0 else 0.0
         
-    now_str = datetime.now().strftime('%m-%d %H:%M')
+    now_str = datetime.now().strftime('%Y-%m-%d %H:%M')
     
-    # 为 Telegram 专门优化的硬核 Markdown 排版
-    caption = f"📐 *IREN 狙击雷达报告 (${current_price:.2f})*\n\n"
-    caption += f"📊 *实时形态解构*\n"
-    caption += f"• 扫描时间：`{now_str}`\n"
-    caption += f"• 当前股价：`${current_price:.2f}` | 量比：`{volume_ratio:.2f}`\n\n"
-    caption += f"🎯 *战术空间坐标*\n"
-    caption += f"• 🟢 黄金埋伏：`${fib_618_target:.2f} ~ ${fib_500_target:.2f}`\n"
-    caption += f"• 🛑 铁律止损：`${hard_stop_loss:.2f}`\n"
-    caption += f"• 🔮 五浪终点：`${take_profit_2:.2f}`\n\n"
-    caption += f"--- \n"
+    # 2. 构建最适合手机 GitHub App/网页版原生渲染的超级 Markdown 交互式面板
+    markdown_report = f"# 📐 IREN 狙击雷达实时终端\n\n"
+    markdown_report += f"### 📊 实时量化解构\n"
+    markdown_report += f"* **最新扫描时间**：`{now_str}` (UTC)\n"
+    markdown_report += f"* **当前市场价格**：**${current_price:.2f}**\n"
+    markdown_report += f"* **五日成交量比**：`{volume_ratio:.2f}`\n\n"
+    markdown_report += f"### 🎯 艾略特风控矩阵坐标\n"
+    markdown_report += f"* 🟢 **黄金埋伏带**：`${fib_618_target:.2f} ~ ${fib_500_target:.2f}`\n"
+    markdown_report += f"* 🛑 **铁律止损线**：`${hard_stop_loss:.2f}` (单笔回撤严控2%)\n"
+    markdown_report += f"* 🔮 **五浪预测终点**：`${take_profit_2:.2f}`\n\n"
+    markdown_report += f"--- \n\n"
+    markdown_report += f"### 🎨 空间矩阵与推动浪时空轨道\n"
+    # 巧妙利用防缓存标记，确保你在 GitHub 里每次点开都是最新生成的图片，而不是旧缓存
+    markdown_report += f"![IREN Matrix](iren_matrix.png?v={int(datetime.now().timestamp())})\n\n"
+    markdown_report += f"--- \n\n"
     
     if fib_618_target <= current_price <= fib_500_target:
-        caption += f"🚨 *【💥 信号触发：授权开火】*\n价格已切入艾略特 Wave 4 黄金洗盘坑！依规授权动用 **{position_allocation_pct*100:.2f}%** 底仓，博弈后市五浪爆发！"
+        markdown_report += f"## 🚨【💥 信号触发：授权开火】\n价格已切入艾略特 Wave 4 黄金洗盘坑！依规授权动用 **{position_allocation_pct*100:.2f}%** 底仓，博弈后市五浪爆发！\n"
     else:
-        caption += f"⏳ * *【目前状态：潜伏观望】*\n当前价格相对止损线较宽。筑底期间建议耐心等待回撤。"
+        markdown_report += f"## ⏳【目前状态：潜伏观望】\n当前价格相对止损线较宽。建议耐心等待回撤或量能进一步缩减。\n"
         
-    send_telegram_radar(caption, photo_buf)
+    # 直接复写 data_log.txt 成为主看板
+    with open('data_log.txt', 'w', encoding='utf-8') as f:
+        f.write(markdown_report)
+    print("✅ 专属战报与核心预测大图已在本地刷新完毕。")
