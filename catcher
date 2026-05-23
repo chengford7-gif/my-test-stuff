@@ -3,6 +3,11 @@ import json
 import pandas as pd
 import numpy as np
 from datetime import datetime
+import os
+
+# 💥 【核心兼容】强制切换 matplotlib 为 Headless 渲染模式，防止在云端 Actions 报错崩溃
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 # 🎯 狙击目标：聚焦单兵 IREN
@@ -10,7 +15,7 @@ SYMBOL = "IREN"
 TOTAL_RISK_LIMIT_PCT = 0.02  # R%: 单笔看错时，允许亏损总资产 A 的最大百分比 (2%)
 
 def get_historical_k_data(symbol):
-    """拉取最近 90 天的日 K 线数据"""
+    """拉取最近 90 天的日 K线数据"""
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?range=90d&interval=1d"
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
     try:
@@ -50,7 +55,6 @@ def find_recent_wave_bounds(df, window=5):
 
 def generate_trend_chart(df, wave_high, fib_500, fib_618, hard_loss, tp2):
     """自动绘制带有战术空间轨道的折线图并保存"""
-    # 仅截取最近 60 天的数据让画面更紧凑、聚焦
     plot_df = df.tail(60).copy()
     
     plt.figure(figsize=(12, 6))
@@ -70,24 +74,22 @@ def generate_trend_chart(df, wave_high, fib_500, fib_618, hard_loss, tp2):
     latest_date = plot_df['date'].iloc[-1]
     latest_close = plot_df['close'].iloc[-1]
     plt.scatter(latest_date, latest_close, color='red', s=80, zorder=5)
-    plt.annotate(f'Current: ${latest_close:.2f}', 
-                 xy=(latest_date, latest_close), 
-                 xytext=(-100, 10), 
-                 textcoords='offset points', 
-                 arrowprops=dict(arrowstyle="->", color='red'),
-                 fontsize=10, fontweight='bold', color='red')
+    
+    # 防止因日期格式引发的小标签位移偏置问题
+    plt.text(latest_date, latest_close, f'  Current: ${latest_close:.2f}', 
+             color='red', fontweight='bold', va='center', ha='left')
 
     plt.title(f'{SYMBOL} Structural Technical Analysis Matrix', fontsize=14, fontweight='bold', pad=15)
     plt.xlabel('Date', fontsize=11)
     plt.ylabel('Price (USD)', fontsize=11)
     plt.grid(True, linestyle='--', alpha=0.3)
     plt.legend(loc='upper left', frameon=True, facecolor='white', edgecolor='none')
-    plt.gcf().autofmt_xdate() # 优化日期时间轴排版
+    plt.gcf().autofmt_xdate()
     
-    # 强制将生成的图片导出为 iren_matrix.png 存回根目录
+    # 保存至文件
     plt.savefig('iren_matrix.png', dpi=150, bbox_inches='tight')
     plt.close()
-    print("📈 战术结构空间图已生成并保存为 iren_matrix.png")
+    print("📈 战术结构空间图已在 Headless 模式下安全生成 iren_matrix.png")
 
 # 初始化本次扫描
 now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -111,7 +113,7 @@ if df is not None and not df.empty:
     take_profit_1 = wave_high
     take_profit_2 = wave_high + (wave_height * 0.618)
     
-    # 💥 执行动态绘图
+    # 执行动态绘图
     generate_trend_chart(df, wave_high, fib_500_target, fib_618_target, hard_stop_loss, take_profit_2)
     
     price_to_sl_pct = (current_price - hard_stop_loss) / current_price
