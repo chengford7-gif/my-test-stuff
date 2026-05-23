@@ -1,26 +1,96 @@
 import requests
+import json
+import pandas as pd
+import numpy as np
 from datetime import datetime
 
-STOCK_SYMBOL = "IREN"
+# 🎯 狙击自选股列表
+WATCH_LIST = ["IREN", "BMNR"]
 
-def get_realtime_price(symbol):
-    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
-    headers = {'User-Agent': 'Mozilla/5.0'}
+def get_historical_k_data(symbol):
+    """拉取最近 90 天的日 K 线数据"""
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?range=90d&interval=1d"
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
     try:
         response = requests.get(url, headers=headers, timeout=10)
         data = response.json()
-        meta = data['chart']['result'][0]['meta']
-        return meta['regularMarketPrice'], meta['currency']
+        result = data['chart']['result'][0]
+        
+        df = pd.DataFrame({
+            'date': pd.to_datetime(result['timestamp'], unit='s'),
+            'open': result['indicators']['quote'][0]['open'],
+            'high': result['indicators']['quote'][0]['high'],
+            'low': result['indicators']['quote'][0]['low'],
+            'close': result['indicators']['quote'][0]['close'],
+            'volume': result['indicators']['quote'][0]['volume']
+        })
+        df.dropna(inplace=True)
+        return df
     except Exception as e:
-        print(f"❌ 抓取失败: {e}")
-        return None, None
+        print(f"❌ 抓取 {symbol} 数据失败: {e}")
+        return None
 
-price, currency = get_realtime_price(STOCK_SYMBOL)
-if price:
-    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    log_message = f"[{now}] 📊 {STOCK_SYMBOL} 最新股价: {price} {currency}\n"
-    print(log_message)
+def find_recent_wave_bounds(df, window=5):
+    """
+    通过滑动窗口算法，自动寻找距离今天最近的显性浪头和浪底
+    window=5 表示一个高点必须比前后各5天都高，才算一个有效的波段高点
+    """
+    # 计算滚动区间的最值
+    df['is_local_max'] = df['high'] == df['high'].rolling(window=window*2+1, center=True).max()
+    df['is_local_min'] = df['low'] == df['low'].rolling(window=window*2+1, center=True).min()
     
-    # 把数据追加写入到本地的一个文本里
-    with open("data_log.txt", "a", encoding="utf-8") as f:
-        f.write(log_message)
+    # 筛选出所有的局部高低点，并按时间倒序排列（最近的在最前面）
+    local_maxima = df[df['is_local_max']].sort_values(by='date', ascending=False)
+    local_minima = df[df['is_local_min']].sort_values(by='date', ascending=False)
+    
+    if local_maxima.empty or local_minima.empty:
+        # 如果找不到有效的局部极值，则退化使用全局极值
+        return df['high'].max(), df['low'].min(), "全局极端空间"
+        
+    # 取出最近的一个有效浪头和最近的一个有效浪底
+    recent_high = local_maxima['high'].iloc[0]
+    recent_low = local_minima['low'].iloc[0]
+    
+    return recent_high, recent_low, f"近代滑动窗口波段(窗口半径:{window}天)"
+
+# 初始化本次扫描
+now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+log_content = f"\n================ 🎯 近代形态学狙击雷达 ({now}) ================\n"
+
+for symbol in WATCH_LIST:
+    df = get_historical_k_data(symbol)
+    if df is None or df.empty:
+        continue
+        
+    current_price = df['close'].iloc[-1]
+    
+    # 🔥 核心：调用算法识别属于当前级别的近代浪头和浪底
+    wave_high, wave_low, method_desc = find_recent_wave_bounds(df, window=5)
+    wave_height = wave_high - wave_low
+    
+    # 算斐波那契黄金坑买入点（根据艾略特波浪 Wave 4 回撤 0.618 或 0.5 的预期）
+    # 如果最近的一波是上涨，期望它回撤到 0.618 位置企稳
+    fib_618_target = wave_high - (wave_height * 0.618)
+    fib_500_target = wave_high - (wave_height * 0.500)
+    
+    status_msg = f"[{symbol}] 当前价: ${current_price:.2f} | 定位模式: {method_desc}\n"
+    status_msg += f"       🗺️ 识别近代浪头: ${wave_high:.2f} | 近代浪底: ${wave_low:.2f}\n"
+    status_msg += f"       📐 斐波那契 50.0% 支撑位: ${fib_500_target:.2f}\n"
+    status_msg += f"       📐 斐波那契 61.8% 黄金坑: ${fib_618_target:.2f}\n"
+    
+    # 狙击手开火判定（价格进入 50% - 61.8% 的黄金埋伏圈）
+    if fib_618_target <= current_price <= fib_500_target:
+        decision = f"       🚨【🔥 狙击信号触发 】股价已准确切入斐波那契黄金回撤埋伏圈！符合买入形态！\n"
+    elif current_price < fib_618_target:
+        decision = f"       ⚠️【警惕】价格已跌破 61.8% 强支撑，形态可能走坏或演变成深幅调整，暂不开火。\n"
+    else:
+        decision = f"       🟢【潜伏中】当前价格依然偏高，距离 50% 支撑位还差 ${current_price - fib_500_target:.2f}，耐心等待回撤。\n"
+        
+    print(status_msg + decision)
+    log_content += status_msg + decision
+
+log_content += "="*65 + "\n"
+
+# 存回云端数据库
+with open("data_log.txt", "a", encoding="utf-8") as f:
+    f.write(log_content)
