@@ -4,6 +4,8 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 import os
+import io
+import base64
 
 # 💥 强制切换 matplotlib 为 Headless 渲染模式
 import matplotlib
@@ -13,10 +15,6 @@ import matplotlib.pyplot as plt
 # 🎯 狙击目标：聚焦单兵 IREN
 SYMBOL = "IREN"
 TOTAL_RISK_LIMIT_PCT = 0.02  # R%: 允许亏损总资产的最大百分比 (2%)
-
-# 🛠️ 【请填写你的 GitHub 信息】用于微信直接渲染图片（请务必和你的真实仓库对齐）
-GITHUB_USER = "chengford7-gif"  # 你的GitHub用户名
-GITHUB_REPO = "my-test-stuff"   # 你的仓库名
 
 def get_historical_k_data(symbol):
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?range=90d&interval=1d"
@@ -48,43 +46,48 @@ def find_recent_wave_bounds(df, window=5):
         return float(df['high'].max()), float(df['low'].min())
     return float(local_maxima['high'].iloc[0]), float(local_minima['low'].iloc[0])
 
-def generate_trend_and_forecast_chart(df, wave_high, fib_500, fib_618, hard_loss, tp2):
+def generate_trend_and_forecast_chart_to_base64(df, wave_high, fib_500, fib_618, hard_loss, tp2):
+    """绘制五浪推动预测图，并直接压缩编译为 Base64 字符串嵌入微信"""
     plot_df = df.tail(60).copy()
-    fig, ax = plt.subplots(figsize=(12, 6.5))
+    fig, ax = plt.subplots(figsize=(10, 5))  # 稍微缩小尺寸以完美适配手机微信屏幕
     
-    # 1. 历史轨迹
-    ax.plot(plot_df['date'], plot_df['close'], label='IREN Historical Close', color='#1f77b4', linewidth=2.5)
-    
+    # 1. 历史实盘价格走势
+    ax.plot(plot_df['date'], plot_df['close'], label='Historical Close', color='#1f77b4', linewidth=2)
     latest_date = plot_df['date'].iloc[-1]
     latest_close = plot_df['close'].iloc[-1]
-    ax.scatter(latest_date, latest_close, color='red', s=90, zorder=5)
-    ax.text(latest_date, latest_close, f'  Current: ${latest_close:.2f}', color='red', fontweight='bold', va='center')
+    ax.scatter(latest_date, latest_close, color='red', s=70, zorder=5)
 
-    # 2. 空间矩阵轨道
-    ax.axhline(y=wave_high, color='orange', linestyle='--', alpha=0.6, label=f'TP1 / Wave 3 High (${wave_high:.2f})')
-    ax.axhline(y=fib_500, color='gold', linestyle=':', alpha=0.5, label=f'Fib 50.0% Support (${fib_500:.2f})')
-    ax.axhline(y=fib_618, color='g', linestyle=':', alpha=0.5, label=f'Fib 61.8% Entry Zone (${fib_618:.2f})')
-    ax.axhline(y=hard_loss, color='r', linestyle='--', alpha=0.6, label=f'SL Hard Stop (${hard_loss:.2f})')
-    ax.axhline(y=tp2, color='purple', linestyle='-.', alpha=0.7, label=f'TP2 Wave 5 Extension (${tp2:.2f})')
+    # 2. 空间关键阻力与支撑轨道
+    ax.axhline(y=wave_high, color='orange', linestyle='--', alpha=0.5, label=f'TP1 ({wave_high:.2f})')
+    ax.axhline(y=fib_500, color='gold', linestyle=':', alpha=0.5, label=f'Fib 50.0% ({fib_500:.2f})')
+    ax.axhline(y=fib_618, color='g', linestyle=':', alpha=0.5, label=f'Fib 61.8% ({fib_618:.2f})')
+    ax.axhline(y=hard_loss, color='r', linestyle='--', alpha=0.5, label=f'SL Stop ({hard_loss:.2f})')
+    ax.axhline(y=tp2, color='purple', linestyle='-.', alpha=0.6, label=f'TP2 Wave 5 ({tp2:.2f})')
+    ax.fill_between(plot_df['date'], fib_618, fib_500, color='green', alpha=0.05)
     
-    ax.fill_between(plot_df['date'], fib_618, fib_500, color='green', alpha=0.06, label='Golden Entry Zone')
-    
-    # 🔮 3. 核心：构建未来五浪推动预测曲线
+    # 🔮 3. 构建未来 15 日的艾略特 Wave 5 推动预测轨迹
     forecast_dates = [latest_date + timedelta(days=i) for i in range(1, 16)]
     time_steps = np.linspace(0, 1, len(forecast_dates))
-    forecast_path = latest_close + (tp2 - latest_close) * time_steps + 3 * np.sin(time_steps * np.pi * 1.5)
+    forecast_path = latest_close + (tp2 - latest_close) * time_steps + 2.5 * np.sin(time_steps * np.pi * 1.5)
     
-    ax.plot(forecast_dates, forecast_path, color='purple', linestyle=':', linewidth=2.5, label='⚡ Predicted Wave 5 Path')
-    ax.scatter(forecast_dates[-1], forecast_path[-1], color='purple', marker='*', s=150, zorder=5)
-    ax.text(forecast_dates[-1], forecast_path[-1], f'  Target: ${tp2:.2f}', color='purple', fontweight='bold', va='bottom')
+    ax.plot(forecast_dates, forecast_path, color='purple', linestyle=':', linewidth=2, label='Predicted Wave 5')
+    ax.scatter(forecast_dates[-1], forecast_path[-1], color='purple', marker='*', s=120, zorder=5)
 
-    ax.set_title(f'{SYMBOL} Technical Matrix & Wave 5 Forecast Radar', fontsize=14, fontweight='bold', pad=15)
-    ax.grid(True, linestyle='--', alpha=0.25)
-    ax.legend(loc='upper left')
+    ax.set_title(f'{SYMBOL} Matrix & Elliott Wave 5 Forecast', fontsize=12, fontweight='bold')
+    ax.grid(True, linestyle='--', alpha=0.2)
+    ax.legend(loc='upper left', fontsize=9)
     fig.autofmt_xdate()
     
+    # 💾 先把常规图保存到本地留底备份
     plt.savefig('iren_matrix.png', dpi=150, bbox_inches='tight')
+    
+    # ⚡ 核心转换：直接把图吐进内存并编译成 Base64 纯文本
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', dpi=120, bbox_inches='tight') # 适当调整 dpi 确保微信加载极速
+    buf.seek(0)
+    base64_str = base64.b64encode(buf.read()).decode('utf-8')
     plt.close()
+    return base64_str
 
 def send_wechat_notification(title, content):
     sendkey = os.environ.get('SERVER_CHAN_KEY')
@@ -99,7 +102,7 @@ def send_wechat_notification(title, content):
     except Exception as e:
         print(f"❌ 微信推送失败: {e}")
 
-# 执行计算
+# 执行量化矩阵计算
 df = get_historical_k_data(SYMBOL)
 if df is not None and not df.empty:
     current_price = float(df['close'].iloc[-1])
@@ -116,25 +119,23 @@ if df is not None and not df.empty:
     hard_stop_loss = wave_low - (wave_height * 0.05)
     take_profit_2 = wave_high + (wave_height * 0.618)
     
-    # 先画图
-    generate_trend_and_forecast_chart(df, wave_high, fib_500_target, fib_618_target, hard_stop_loss, take_profit_2)
+    # 生成预测图并直接获取内嵌式图层文本
+    img_base64 = generate_trend_and_forecast_chart_to_base64(df, wave_high, fib_500_target, fib_618_target, hard_stop_loss, take_profit_2)
     
     price_to_sl_pct = (current_price - hard_stop_loss) / current_price
     position_allocation_pct = min(TOTAL_RISK_LIMIT_PCT / price_to_sl_pct, 0.50) if price_to_sl_pct > 0 else 0.0
         
-    # 🔗 利用 GitHub Raw 链接直接白嫖图床，渲染未来推动预测图
-    chart_url = f"https://raw.githubusercontent.com/{GITHUB_USER}/{GITHUB_REPO}/main/iren_matrix.png"
-    
     now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     wechat_title = f"📐 IREN 狙击雷达报告 (${current_price:.2f})"
     
+    # 📝 重新重构精简紧凑的排版，确保手机端一屏全显不被折叠
     wechat_content = f"### 📊 IREN 实时量化形态战报\n"
     wechat_content += f"* **扫描时间**：{now_str}\n"
     wechat_content += f"* **当前股价**：`${current_price:.2f}` | **量比**：`{volume_ratio:.2f}`\n\n"
     wechat_content += f"--- \n"
     wechat_content += f"### 🔮 艾略特五浪上攻时空预测图\n"
-    # 💥 这里直接注入 Markdown 图片语法，强制微信加载
-    wechat_content += f"![Wave 5 Forecast]({chart_url}?t={int(datetime.now().timestamp())})\n\n"
+    # 💥 关键点：使用标准的 HTML 标签将 Base64 图层死死按进微信，直接越过所有图床限制
+    wechat_content += f'<img src="data:image/png;base64,{img_base64}" width="100%" />\n\n'
     wechat_content += f"--- \n"
     wechat_content += f"### 🎯 战术解构空间\n"
     wechat_content += f"* 🟢 **黄金埋伏带**：`${fib_618_target:.2f} ~ ${fib_500_target:.2f}`\n"
@@ -147,6 +148,6 @@ if df is not None and not df.empty:
         wechat_content += f"价格已切入艾略特 Wave 4 黄金洗盘坑！依规授权动用当前总现金的 **{position_allocation_pct*100:.2f}%** 切入底仓，博弈后市五浪爆发！\n"
     else:
         wechat_content += f"### ⏳【目前状态：潜伏观望】\n"
-        wechat_content += f"当前价格相对止损线较宽。若此时强开仓，依矩阵风控铁律仅允许分配现金的 **{position_allocation_pct*100:.2f}%**。建议耐心等待回撤或等待量能进一步缩减。\n"
+        wechat_content += f"当前价格相对止损线较宽。建议耐心等待回撤或等待量能进一步缩减。\n"
         
     send_wechat_notification(wechat_title, wechat_content)
