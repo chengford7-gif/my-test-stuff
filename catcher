@@ -48,7 +48,7 @@ def find_recent_wave_bounds(df, window=5):
 
 # 初始化本次扫描
 now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-log_content = f"\n================ 🎯 形态+成交量双重狙击雷达 ({now}) ================\n"
+log_content = f"\n================ 🎯 终极形态学狙击全维雷达 ({now}) ================\n"
 
 for symbol in WATCH_LIST:
     df = get_historical_k_data(symbol)
@@ -58,33 +58,48 @@ for symbol in WATCH_LIST:
     current_price = df['close'].iloc[-1]
     current_volume = df['volume'].iloc[-1]
     
-    # 💥 新增量化指标：计算过去 5 天的平均成交量（不含今天）
+    # 计算过去 5 天的平均成交量
     avg_volume_5d = df['volume'].iloc[-6:-1].mean()
     volume_ratio = current_volume / avg_volume_5d if avg_volume_5d > 0 else 1.0
     
-    # 调用算法识别近代浪头和浪底
+    # 调用算法识别近代浪头和浪底（Wave 3 顶 和 Wave 2 底）
     wave_high, wave_low, method_desc = find_recent_wave_bounds(df, window=5)
     wave_height = wave_high - wave_low
     
-    # 计算斐波那契回撤位置
+    # 📐 斐波那契多维推演公式
     fib_500_target = wave_high - (wave_height * 0.500)
     fib_618_target = wave_high - (wave_height * 0.618)
     
-    status_msg = f"[{symbol}] 当前价: ${current_price:.2f} | 量比(今日/5日均量): {volume_ratio:.2f}\n"
-    status_msg += f"       🗺️ 近代浪头: ${wave_high:.2f} | 近代浪底: ${wave_low:.2f}\n"
-    status_msg += f"       📐 斐波那契支撑带: ${fib_618_target:.2f} ── ${fib_500_target:.2f}\n"
+    # 💥【新增】出场风控推演
+    hard_stop_loss = wave_low - (wave_height * 0.05)  # 跌破浪底下方5%作为铁律止损
+    take_profit_1 = wave_high                         # 第一止盈点：挑战前高浪顶
+    take_profit_2 = wave_high + (wave_height * 0.618) # 第二止盈点：Wave 5 标准扩展位
     
-    # 🔍 【双重决策过滤逻辑】
+    status_msg = f"[{symbol}] 当前价: ${current_price:.2f} | 量比: {volume_ratio:.2f}\n"
+    status_msg += f"       🗺️ 空间坐标 -> 近代浪底(SL锚定): ${wave_low:.2f} | 近代浪头(前高): ${wave_high:.2f}\n"
+    status_msg += f"       📥 买入埋伏带: ${fib_618_target:.2f} ── ${fib_500_target:.2f}\n"
+    status_msg += f"       📤 测算卖出线 -> 【TP1 保守前高】: ${take_profit_1:.2f} | 【TP2 五浪爆发】: ${take_profit_2:.2f}\n"
+    status_msg += f"       🛡️ 测算撤退线 -> 【SL 铁律止损】: ${hard_stop_loss:.2f}\n"
+    
+    # 🔍 双重决策过滤逻辑
     if fib_618_target <= current_price <= fib_500_target:
-        # 价格落入黄金坑，开始审查成交量形态
         if volume_ratio <= 0.85:
-            decision = f"       🚨【🔥 狙击开火信号触发 !!】价格触及斐波那契支撑带，且量能萎缩({volume_ratio:.2f}倍)，确认为机构缩量洗盘！符合右侧建仓！\n"
+            # 计算当前开火的风报比 (预期利润 / 潜在亏损)
+            potential_reward = take_profit_2 - current_price
+            potential_risk = current_price - hard_stop_loss
+            rr_ratio = potential_reward / potential_risk if potential_risk > 0 else 0
+            
+            decision = f"       🚨【🔥 狙击信号触发 !!】股价切入黄金坑且缩量洗盘！\n"
+            decision += f"           📊 实时风报比: {rr_ratio:.2f} : 1（若开火，目标指向 ${take_profit_2:.2f}，跌破 ${hard_stop_loss:.2f} 坚决止损）\n"
         else:
-            decision = f"       ⏳【观察】价格虽到支撑带，但今日成交量偏大({volume_ratio:.2f}倍)，有放量砸盘嫌疑，暂不开火，等待缩量企稳。\n"
+            decision = f"       ⏳【观察】价格虽到支撑带，但成交量未见明显萎缩，暂不开火，谨防放量破位。\n"
     elif current_price < fib_618_target:
-        decision = f"       ⚠️【破位警惕】价格已跌破 61.8% 强支撑，形态可能走坏，狙击手关闭保险。\n"
+        if current_price <= hard_stop_loss:
+            decision = f"       💀【风控警报】股价已跌破铁律止损线(${hard_stop_loss:.2f})！形态彻底走坏，若持有必须无条件清仓离场！\n"
+        else:
+            decision = f"       ⚠️【破位警惕】价格已跌破 61.8% 强支撑，有数浪失败风险，关闭保险静观其变。\n"
     else:
-        decision = f"       🟢【潜伏中】价格依然在支撑带上方，距离 50% 目标位还差 ${current_price - fib_500_target:.2f}，耐心等待其缩量回调。\n"
+        decision = f"       🟢 {symbol} 处于【买点潜伏期】，距离埋伏圈上轨还差 ${current_price - fib_500_target:.2f}。\n"
         
     print(status_msg + decision)
     log_content += status_msg + decision
@@ -94,4 +109,4 @@ log_content += "="*65 + "\n"
 # 存回云端数据库
 with open("data_log.txt", "a", encoding="utf-8") as f:
     f.write(log_content)
-print("📊 形态量能双重战报已写入 data_log.txt")
+print("📊 全维狙击战报已安全写入 data_log.txt")
