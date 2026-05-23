@@ -31,23 +31,16 @@ def get_historical_k_data(symbol):
         return None
 
 def find_recent_wave_bounds(df, window=5):
-    """
-    通过滑动窗口算法，自动寻找距离今天最近的显性浪头和浪底
-    window=5 表示一个高点必须比前后各5天都高，才算一个有效的波段高点
-    """
-    # 计算滚动区间的最值
+    """通过滑动窗口算法，自动寻找距离今天最近的显性浪头和浪底"""
     df['is_local_max'] = df['high'] == df['high'].rolling(window=window*2+1, center=True).max()
     df['is_local_min'] = df['low'] == df['low'].rolling(window=window*2+1, center=True).min()
     
-    # 筛选出所有的局部高低点，并按时间倒序排列（最近的在最前面）
     local_maxima = df[df['is_local_max']].sort_values(by='date', ascending=False)
     local_minima = df[df['is_local_min']].sort_values(by='date', ascending=False)
     
     if local_maxima.empty or local_minima.empty:
-        # 如果找不到有效的局部极值，则退化使用全局极值
         return df['high'].max(), df['low'].min(), "全局极端空间"
         
-    # 取出最近的一个有效浪头和最近的一个有效浪底
     recent_high = local_maxima['high'].iloc[0]
     recent_low = local_minima['low'].iloc[0]
     
@@ -55,7 +48,7 @@ def find_recent_wave_bounds(df, window=5):
 
 # 初始化本次扫描
 now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-log_content = f"\n================ 🎯 近代形态学狙击雷达 ({now}) ================\n"
+log_content = f"\n================ 🎯 形态+成交量双重狙击雷达 ({now}) ================\n"
 
 for symbol in WATCH_LIST:
     df = get_historical_k_data(symbol)
@@ -63,27 +56,35 @@ for symbol in WATCH_LIST:
         continue
         
     current_price = df['close'].iloc[-1]
+    current_volume = df['volume'].iloc[-1]
     
-    # 🔥 核心：调用算法识别属于当前级别的近代浪头和浪底
+    # 💥 新增量化指标：计算过去 5 天的平均成交量（不含今天）
+    avg_volume_5d = df['volume'].iloc[-6:-1].mean()
+    volume_ratio = current_volume / avg_volume_5d if avg_volume_5d > 0 else 1.0
+    
+    # 调用算法识别近代浪头和浪底
     wave_high, wave_low, method_desc = find_recent_wave_bounds(df, window=5)
     wave_height = wave_high - wave_low
     
-    # 算斐波那契黄金坑买入点（根据艾略特波浪 Wave 4 回撤 0.618 或 0.5 的预期）
-    fib_618_target = wave_high - (wave_height * 0.618)
+    # 计算斐波那契回撤位置
     fib_500_target = wave_high - (wave_height * 0.500)
+    fib_618_target = wave_high - (wave_height * 0.618)
     
-    status_msg = f"[{symbol}] 当前价: ${current_price:.2f} | 定位模式: {method_desc}\n"
-    status_msg += f"       🗺️ 识别近代浪头: ${wave_high:.2f} | 近代浪底: ${wave_low:.2f}\n"
-    status_msg += f"       📐 斐波那契 50.0% 支撑位: ${fib_500_target:.2f}\n"
-    status_msg += f"       📐 斐波那契 61.8% 黄金坑: ${fib_618_target:.2f}\n"
+    status_msg = f"[{symbol}] 当前价: ${current_price:.2f} | 量比(今日/5日均量): {volume_ratio:.2f}\n"
+    status_msg += f"       🗺️ 近代浪头: ${wave_high:.2f} | 近代浪底: ${wave_low:.2f}\n"
+    status_msg += f"       📐 斐波那契支撑带: ${fib_618_target:.2f} ── ${fib_500_target:.2f}\n"
     
-    # 狙击手开火判定（价格进入 50% - 61.8% 的黄金埋伏圈）
+    # 🔍 【双重决策过滤逻辑】
     if fib_618_target <= current_price <= fib_500_target:
-        decision = f"       🚨【🔥 狙击信号触发 】股价已准确切入斐波那契黄金回撤埋伏圈！符合买入形态！\n"
+        # 价格落入黄金坑，开始审查成交量形态
+        if volume_ratio <= 0.85:
+            decision = f"       🚨【🔥 狙击开火信号触发 !!】价格触及斐波那契支撑带，且量能萎缩({volume_ratio:.2f}倍)，确认为机构缩量洗盘！符合右侧建仓！\n"
+        else:
+            decision = f"       ⏳【观察】价格虽到支撑带，但今日成交量偏大({volume_ratio:.2f}倍)，有放量砸盘嫌疑，暂不开火，等待缩量企稳。\n"
     elif current_price < fib_618_target:
-        decision = f"       ⚠️【警惕】价格已跌破 61.8% 强支撑，形态可能走坏或演变成深幅调整，暂不开火。\n"
+        decision = f"       ⚠️【破位警惕】价格已跌破 61.8% 强支撑，形态可能走坏，狙击手关闭保险。\n"
     else:
-        decision = f"       🟢【潜伏中】当前价格依然偏高，距离 50% 支撑位还差 ${current_price - fib_500_target:.2f}，耐心等待回撤。\n"
+        decision = f"       🟢【潜伏中】价格依然在支撑带上方，距离 50% 目标位还差 ${current_price - fib_500_target:.2f}，耐心等待其缩量回调。\n"
         
     print(status_msg + decision)
     log_content += status_msg + decision
@@ -93,4 +94,4 @@ log_content += "="*65 + "\n"
 # 存回云端数据库
 with open("data_log.txt", "a", encoding="utf-8") as f:
     f.write(log_content)
-print("📊 战报已成功写入 data_log.txt")
+print("📊 形态量能双重战报已写入 data_log.txt")
