@@ -3,6 +3,7 @@ import json
 import pandas as pd
 import numpy as np
 from datetime import datetime
+import matplotlib.pyplot as plt
 
 # 🎯 狙击目标：聚焦单兵 IREN
 SYMBOL = "IREN"
@@ -47,6 +48,47 @@ def find_recent_wave_bounds(df, window=5):
     
     return recent_high, recent_low, f"近代滑动窗口波段(窗口半径:{window}天)"
 
+def generate_trend_chart(df, wave_high, fib_500, fib_618, hard_loss, tp2):
+    """自动绘制带有战术空间轨道的折线图并保存"""
+    # 仅截取最近 60 天的数据让画面更紧凑、聚焦
+    plot_df = df.tail(60).copy()
+    
+    plt.figure(figsize=(12, 6))
+    plt.plot(plot_df['date'], plot_df['close'], label='IREN Close Price', color='#1f77b4', linewidth=2)
+    
+    # 🛠️ 绘制动态战术轨道虚线
+    plt.axhline(y=wave_high, color='orange', linestyle='--', alpha=0.8, label=f'TP1 / Wave3 High (${wave_high:.2f})')
+    plt.axhline(y=fib_500, color='gold', linestyle=':', alpha=0.7, label=f'Fib 50.0% (${fib_500:.2f})')
+    plt.axhline(y=fib_618, color='g', linestyle=':', alpha=0.7, label=f'Fib 61.8% / Entry Target (${fib_618:.2f})')
+    plt.axhline(y=hard_loss, color='r', linestyle='--', alpha=0.8, label=f'SL Hard Stop (${hard_loss:.2f})')
+    plt.axhline(y=tp2, color='purple', linestyle='-.', alpha=0.6, label=f'TP2 Wave5 Ext (${tp2:.2f})')
+    
+    # 填充黄金埋伏圈颜色区块
+    plt.fill_between(plot_df['date'], fib_618, fib_500, color='green', alpha=0.08, label='Golden Entry Zone')
+    
+    # 标注最新价格点
+    latest_date = plot_df['date'].iloc[-1]
+    latest_close = plot_df['close'].iloc[-1]
+    plt.scatter(latest_date, latest_close, color='red', s=80, zorder=5)
+    plt.annotate(f'Current: ${latest_close:.2f}', 
+                 xy=(latest_date, latest_close), 
+                 xytext=(-100, 10), 
+                 textcoords='offset points', 
+                 arrowprops=dict(arrowstyle="->", color='red'),
+                 fontsize=10, fontweight='bold', color='red')
+
+    plt.title(f'{SYMBOL} Structural Technical Analysis Matrix', fontsize=14, fontweight='bold', pad=15)
+    plt.xlabel('Date', fontsize=11)
+    plt.ylabel('Price (USD)', fontsize=11)
+    plt.grid(True, linestyle='--', alpha=0.3)
+    plt.legend(loc='upper left', frameon=True, facecolor='white', edgecolor='none')
+    plt.gcf().autofmt_xdate() # 优化日期时间轴排版
+    
+    # 强制将生成的图片导出为 iren_matrix.png 存回根目录
+    plt.savefig('iren_matrix.png', dpi=150, bbox_inches='tight')
+    plt.close()
+    print("📈 战术结构空间图已生成并保存为 iren_matrix.png")
+
 # 初始化本次扫描
 now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 log_content = f"\n================ 📐 IREN 单兵比例矩阵狙击雷达 ({now}) ================\n"
@@ -56,26 +98,23 @@ if df is not None and not df.empty:
     current_price = float(df['close'].iloc[-1])
     current_volume = float(df['volume'].iloc[-1])
     
-    # 计算过去 5 天的平均成交量
     avg_volume_5d = float(df['volume'].iloc[-6:-1].mean())
     volume_ratio = current_volume / avg_volume_5d if avg_volume_5d > 0 else 1.0
     
-    # 算法识别近代浪头和浪底
     wave_high, wave_low, method_desc = find_recent_wave_bounds(df, window=5)
     wave_height = wave_high - wave_low
     
-    # 📐 斐波那契空间计算
     fib_500_target = wave_high - (wave_height * 0.500)
     fib_618_target = wave_high - (wave_height * 0.618)
     
-    # 出场防线
     hard_stop_loss = wave_low - (wave_height * 0.05)
     take_profit_1 = wave_high
     take_profit_2 = wave_high + (wave_height * 0.618)
     
-    # 💥【动态加仓资金比率计算】
-    price_to_sl_pct = (current_price - hard_stop_loss) / current_price
+    # 💥 执行动态绘图
+    generate_trend_chart(df, wave_high, fib_500_target, fib_618_target, hard_stop_loss, take_profit_2)
     
+    price_to_sl_pct = (current_price - hard_stop_loss) / current_price
     if price_to_sl_pct > 0:
         position_allocation_pct = TOTAL_RISK_LIMIT_PCT / price_to_sl_pct
         if position_allocation_pct > 0.50:
@@ -87,7 +126,6 @@ if df is not None and not df.empty:
     status_msg += f"       🎯 战术空间 -> 埋伏带: ${fib_618_target:.2f}-${fib_500_target:.2f} | 止损线: ${hard_stop_loss:.2f}\n"
     status_msg += f"       📤 出场矩阵 -> 【TP1 减仓线】: ${take_profit_1:.2f} (筑顶分批落袋50%) | 【TP2 狂欢线】: ${take_profit_2:.2f} (清仓终点站)\n"
     
-    # 🔍 精细化决策树
     if fib_618_target <= current_price <= fib_500_target:
         if volume_ratio <= 0.85:
             potential_reward = take_profit_2 - current_price
@@ -113,7 +151,6 @@ if df is not None and not df.empty:
 
 log_content += "="*65 + "\n"
 
-# 存回云端数据库
 with open("data_log.txt", "a", encoding="utf-8") as f:
     f.write(log_content)
 print("📊 IREN 单兵战报已安全存回")
