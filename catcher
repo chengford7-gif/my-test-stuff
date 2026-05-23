@@ -69,7 +69,6 @@ for symbol in WATCH_LIST:
     wave_height = wave_high - wave_low
     
     # 算斐波那契黄金坑买入点（根据艾略特波浪 Wave 4 回撤 0.618 或 0.5 的预期）
-    # 如果最近的一波是上涨，期望它回撤到 0.618 位置企稳
     fib_618_target = wave_high - (wave_height * 0.618)
     fib_500_target = wave_high - (wave_height * 0.500)
     
@@ -94,3 +93,4 @@ log_content += "="*65 + "\n"
 # 存回云端数据库
 with open("data_log.txt", "a", encoding="utf-8") as f:
     f.write(log_content)
+print("📊 战报已成功写入 data_log.txt")
