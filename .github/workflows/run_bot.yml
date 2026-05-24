@@ -2,8 +2,8 @@ name: IREN Price Catcher
 
 on:
   schedule:
-    - cron: '0 */4 * * *' # 每 4 小时在云端无人值守全自动扫描一次
-  workflow_dispatch: # 核心：允许你在任何账号的手机 GitHub App 上随时随地点击按钮手动冲锋刷新
+    - cron: '0 */4 * * *' # 每 4 小时全自动在后台更新一次首页
+  workflow_dispatch: # 核心：允许你在手机 App 上随时随地手动点击按钮强制冲锋刷新
 
 jobs:
   build:
@@ -26,11 +26,11 @@ jobs:
       run: |
         python3 catcher
 
-    - name: 自动同步战报与实战走势图回仓库
+    - name: 自动将最新看板和预测图同步回仓库主页
       run: |
         git config --global user.name "GitHub Actions Bot"
         git config --global user.email "actions@github.com"
-        # 核心：将本地算好的 data_log.txt 面板和 iren_matrix.png 图片强制推回你的主仓库
-        git add data_log.txt iren_matrix.png || true
-        git commit -m "自动更新近代形态学狙击雷达战报与核心走势图" || true
+        # 💥 核心：将本地刷新的主页 README.md 和核心预测大图 iren_matrix.png 一起推回主仓库
+        git add README.md iren_matrix.png || true
+        git commit -m "自动更新近代形态学狙击雷达仓库首页看板" || true
         git push
