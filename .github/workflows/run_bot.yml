@@ -3,35 +3,34 @@ name: Update IREN Quantum Model Dashboard
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 0 * * *'   # 每天 UTC 0点（香港时间早上8点）
+    - cron: '0 0 * * *'
 
 jobs:
-  build-and-update:
+  build:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install Dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install requests pandas matplotlib numpy yfinance
-
-      - name: Run Script
-        run: python catcher.py
-
-      - name: Commit and Push Changes
-        run: |
-          git config --global user.name 'github-actions[bot]'
-          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          git add iren_quantum_vs.png README.md
-          git commit -m "Auto-Update: IREN Quantum Dashboard $(date +'%Y-%m-%d %H:%M:%S')" || echo "No changes to commit"
-          git push
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        
+    - name: Install Dependencies
+      # ⚠️ 必须在这里添加 yfinance
+      run: |
+        pip install requests pandas numpy matplotlib yfinance
+        
+    - name: Run Script
+      run: |
+        python catcher.py
+        
+    - name: Commit Changes
+      run: |
+        git config --global user.name 'github-actions[bot]'
+        git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+        git add iren_quantum_v5.png README.md
+        git commit -m "Auto-Update Dashboard" || echo "No changes"
+        git push
