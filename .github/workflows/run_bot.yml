@@ -3,51 +3,38 @@ name: Update IREN Quantum Model Dashboard
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 */6 * * *'
+    - cron: '0 0 * * *'
 
 jobs:
-  build-and-update:
+  build:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-
+    env:
+      # 消除 Node.js 20 警告
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
-    # 1. 稳稳检出仓库代码
-    - name: Checkout Repository
-      uses: actions/checkout@v4
-      with:
-        persist-credentials: true
-
-    # 2. 部署干净的 Python 3.10 环境（彻底移除 cache 机制，断绝报错源）
-    - name: Set up Python 3.10
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.10'
-
-    # 3. 现场强行安装基础跑图三件套
+        
     - name: Install Dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install requests pandas numpy matplotlib
-
-    # 4. 彻底物理清理历史各版本残留旧图
-    - name: Purge Legacy Assets
+        # 明确安装 numpy 以确保科学计算基础库稳定
+        pip install pandas matplotlib yfinance numpy requests
+        
+    - name: Run Script
       run: |
-        rm -f iren_matrix.png
-        rm -f iren_quantum_live.png
-        rm -f iren_quantum_v3.png
-        rm -f iren_quantum_v4.png
-
-    # 5. 雷霆出击！运行自适应数浪强化脚本
-    - name: Execute Quantum Matrix Catcher
+        python catcher.py
+        
+    - name: Commit Changes
       run: |
-        python catcher
-
-    # 6. 强行捕获所有物理资产变化并推送回主页
-    - name: Commit and Push Terminal Updates
-      run: |
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action Terminal"
-        git add -A
-        git commit -m "🤖 Quantum Terminal: Synced v5 structural dual-charts & RPF factors" || echo "No changes to commit"
+        git config --global user.name 'github-actions[bot]'
+        git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+        git add iren_quantum_v5.png README.md
+        git commit -m "Auto-Update Dashboard $(date +'%Y-%m-%d')" || echo "No changes"
         git push
