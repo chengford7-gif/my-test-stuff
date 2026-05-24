@@ -19,8 +19,8 @@ jobs:
         python-version: '3.10'
         
     - name: Install Dependencies
-      # ⚠️ 必须在这里添加 yfinance
       run: |
+        python -m pip install --upgrade pip
         pip install requests pandas numpy matplotlib yfinance
         
     - name: Run Script
@@ -32,5 +32,5 @@ jobs:
         git config --global user.name 'github-actions[bot]'
         git config --global user.email 'github-actions[bot]@users.noreply.github.com'
         git add iren_quantum_v5.png README.md
-        git commit -m "Auto-Update Dashboard" || echo "No changes"
+        git commit -m "Auto-Update Dashboard $(date +'%Y-%m-%d')" || echo "No changes"
         git push
