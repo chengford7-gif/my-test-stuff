@@ -9,12 +9,10 @@ jobs:
   build-and-update:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # 确保这个权限在，这允许 GitHub Actions 修改仓库
+      contents: write
 
     steps:
     - uses: actions/checkout@v4
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -28,17 +26,21 @@ jobs:
 
     - name: Run Script
       run: |
-        # 寻找并运行 catcher.py
-        SCRIPT_PATH=$(find . -name "catcher.py" | head -n 1)
-        python "$SCRIPT_PATH"
+        python catcher.py
+        # 这一步很重要：手动检查图片是否生成或更新
+        echo "--- 📋 检查图片状态 ---"
+        ls -lh iren_quantum_v5.png
+        echo "-----------------------"
 
-    # 新增：把生成的图片推回仓库
     - name: Commit and Push Changes
       run: |
         git config --global user.name 'github-actions[bot]'
         git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-        # 这一步会添加所有更改的文件（比如你的图片）
+        
+        # 强制查看 Git 状态，这能告诉我它到底有没有检测到文件改动
+        git status
+        
         git add .
-        # 如果有变动才提交，防止没有更新时报错
-        git commit -m "Update Quantum Model Chart [Bot]" || echo "No changes to update"
+        # 如果没有改动，打印提示，而不是静默忽略
+        git commit -m "Update Quantum Model Chart [Bot]" || echo "【诊断信息】Git 检测到没有文件变动，无需提交"
         git push
