@@ -1,35 +1,61 @@
-name: IREN Price Catcher
+name: Update IREN Quantum Model Dashboard
 
 on:
-  schedule:
-    - cron: '0 */4 * * *'
+  # 1. 允许你在 Actions 界面随时手动点击 "Run workflow" 强行刷新
   workflow_dispatch:
+  
+  # 2. 自动定时任务：每 6 小时在后台静默自动抓取数据并重绘看板
+  schedule:
+    - cron: '0 */6 * * *'
 
 jobs:
-  build:
+  build-and-update:
     runs-on: ubuntu-latest
-    steps:
-    - name: 检查仓库代码
-      uses: actions/checkout@v4
+    permissions:
+      contents: write  # 赋予 Actions 写入和推送 README / 图片回仓库的最高权限
 
-    - name: 设置 Python 环境
+    steps:
+    # 第一步：检出你的仓库代码
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+      with:
+        persist-credentials: true
+
+    # 第二步：部署标准的 Python 3.10 生产环境
+    - name: Set up Python 3.10
       uses: actions/setup-python@v5
       with:
-        python-version: '3.10'
+        python-level: '3.10'
+        cache: 'pip'
 
-    - name: 安装量子模型核心数学与绘图依赖
+    # 第三步：极速安装量化跑图依赖组件
+    - name: Install Dependencies
       run: |
         python -m pip install --upgrade pip
         pip install requests pandas numpy matplotlib
 
-    - name: 运行量子艾略特模型解构
+    # 第四步：物理清理历史残留旧图（彻底腾出空间，防止 Camo 混淆）
+    - name: Purge Legacy Assets
       run: |
-        python3 catcher
+        rm -f iren_matrix.png
+        rm -f iren_quantum_live.png
 
-    - name: 自动将最新看板和复刻风格预测大图同步回仓库主页
+    # 第五步：雷霆出击！运行 catcher 脚本，生成新 README 并绘制带节点股价的橙色虚线图
+    - name: Execute Quantum Matrix Catcher
       run: |
-        git config --global user.name "GitHub Actions Bot"
-        git config --global user.email "actions@github.com"
-        git add README.md iren_matrix.png || true
-        git commit -m "Quantum Model Projection: 自动同步最新的 TradingView 复刻风格时空看板" || true
+        python catcher
+
+    # 第六步：💥 全资产追踪并强行推送回你的 GitHub 仓库主页
+    - name: Commit and Push Terminal Updates
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action Terminal"
+        
+        # 使用 -A 强行捕获文件更名、删除和全新生成的 iren_quantum_v3.png 资产
+        git add -A
+        
+        # 即使这次价格没变、没有任何文件产生修改，也静默通过，绝不抛错
+        git commit -m "🤖 Quantum Terminal: Synced Elliott Wave ⑤ orange tracks & prices" || echo "No changes to commit"
+        
+        # 轰油门推流
         git push
