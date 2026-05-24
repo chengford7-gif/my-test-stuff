@@ -1,5 +1,4 @@
-# IREN Quantum Model Dashboard
+# IREN Quantum Model
 
-最后更新时间: 2026-05-24 03:50:42 UTC
-
+- **Current Price**: $56.83
 ![Dashboard](iren_quantum_v5.png)
