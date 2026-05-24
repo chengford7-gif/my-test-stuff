@@ -19,13 +19,17 @@ jobs:
       with:
         python-version: '3.10'
 
+    - name: Debug: List all files
+      run: |
+        echo "--- 📋 当前仓库文件树 ---"
+        ls -R
+        echo "--------------------------"
+
     - name: Install Dependencies
       run: |
-        python -m pip install --upgrade pip
         pip install requests pandas numpy matplotlib
-        echo "--- 📋 当前已安装环境清单 ---"
-        pip list
-        echo "----------------------------"
-    
+
     - name: Run Quantum Model Engine
       run: python catcher.py
+      # 如果你的 catcher.py 不在根目录，请在这里加上工作目录路径，例如：
+      # working-directory: ./子目录名
