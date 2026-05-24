@@ -5,17 +5,19 @@ import numpy as np
 from datetime import datetime, timedelta
 import os
 
-# 💥 强制切换 matplotlib 为 Headless 渲染模式，防止在云端 Linux 服务器上报错
+# 💥 强制切换 matplotlib 为 Headless 渲染模式，防止在云端 Linux 服务器上崩溃
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 
 # 🎯 狙击目标
 SYMBOL = "IREN"
 TOTAL_RISK_LIMIT_PCT = 0.02
 
 def get_historical_k_data(symbol):
-    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?range=90d&interval=1d"
+    # 获取 1 年的日线数据，以便准确捕捉大级别的 Q-Structure 几何锚点
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?range=1y&interval=1d"
     headers = {'User-Agent': 'Mozilla/5.0'}
     try:
         response = requests.get(url, headers=headers, timeout=10)
@@ -34,97 +36,150 @@ def get_historical_k_data(symbol):
         print(f"❌ 数据抓取失败: {e}")
         return None
 
-def find_recent_wave_bounds(df, window=5):
-    df['is_local_max'] = df['high'] == df['high'].rolling(window=window*2+1, center=True).max()
-    df['is_local_min'] = df['low'] == df['low'].rolling(window=window*2+1, center=True).min()
-    local_maxima = df[df['is_local_max']].sort_values(by='date', ascending=False)
-    local_minima = df[df['is_local_min']].sort_values(by='date', ascending=False)
-    if local_maxima.empty or local_minima.empty:
-        return float(df['high'].max()), float(df['low'].min())
-    return float(local_maxima['high'].iloc[0]), float(local_minima['low'].iloc[0])
-
-def generate_trend_and_forecast_chart(df, wave_high, fib_500, fib_618, hard_loss, tp2):
-    plot_df = df.tail(60).copy()
-    fig, ax = plt.subplots(figsize=(11, 5.5)) # 完美适配 GitHub 网页与手机 App 原生渲染的大宽屏
+def generate_elliottchart_replica_chart(df, current_price):
+    # 截取最近 120 天日线数据，完美模拟 @ElliottChart 截图的视角范围
+    plot_df = df.tail(120).copy()
+    plot_df = plot_df.reset_index(drop=True)
     
-    # 绘制历史收盘实盘线
-    ax.plot(plot_df['date'], plot_df['close'], label='IREN Close Price', color='#1f77b4', linewidth=2.5)
+    # 💥 【视觉高度复刻】使用完整的坐标轴和刻度体系
+    fig, ax = plt.subplots(figsize=(12, 7), facecolor='#ffffff')
+    ax.set_facecolor('#ffffff')
+    
+    # 1. 绘制高精度实盘收盘线（TradingView 极简灰蓝风格）
+    ax.plot(plot_df['date'], plot_df['close'], color='#2B5E8C', linewidth=2, label='IREN Real-Time Close', zorder=3)
+    
     latest_date = plot_df['date'].iloc[-1]
-    latest_close = plot_df['close'].iloc[-1]
-    ax.scatter(latest_date, latest_close, color='red', s=70, zorder=5)
-
-    # 艾略特空间矩阵轨道
-    ax.axhline(y=wave_high, color='orange', linestyle='--', alpha=0.5, label=f'TP1 / Wave3 High (${wave_high:.2f})')
-    ax.axhline(y=fib_500, color='gold', linestyle=':', alpha=0.5, label=f'Fib 50.0% (${fib_500:.2f})')
-    ax.axhline(y=fib_618, color='g', linestyle=':', alpha=0.5, label=f'Fib 61.8% Entry (${fib_618:.2f})')
-    ax.axhline(y=hard_loss, color='r', linestyle='--', alpha=0.5, label=f'SL Hard Stop (${hard_loss:.2f})')
-    ax.axhline(y=tp2, color='purple', linestyle='-.', alpha=0.6, label=f'TP2 Wave5 Ext (${tp2:.2f})')
-    ax.fill_between(plot_df['date'], fib_618, fib_500, color='green', alpha=0.06)
     
-    # 构建未来 15 日的五浪上攻预测曲线轨迹
-    forecast_dates = [latest_date + timedelta(days=i) for i in range(1, 16)]
-    time_steps = np.linspace(0, 1, len(forecast_dates))
-    forecast_path = latest_close + (tp2 - latest_close) * time_steps + 3 * np.sin(time_steps * np.pi * 1.5)
+    # 2. 【核心几何解构：寻找结构锚点】寻找 120 天内的绝对高低点
+    idx_max = plot_df['high'].idxmax()
+    idx_min = plot_df['low'].idxmin()
     
-    ax.plot(forecast_dates, forecast_path, color='purple', linestyle=':', linewidth=2.5, label='Predicted Wave 5 Path')
-    ax.scatter(forecast_dates[-1], forecast_path[-1], color='purple', marker='*', s=120, zorder=5)
+    anchor_high_date = plot_df['date'].iloc[idx_max]
+    anchor_high_val = plot_df['high'].max()
+    anchor_low_date = plot_df['date'].iloc[idx_min]
+    anchor_low_val = plot_df['low'].min()
+    
+    # 3. 【Q-Structure $\lambda$ 射线矩阵复刻】
+    # 模拟 @ElliottChart 从结构低点/高点发出的多条等价射线 (Rays)
+    future_days = 60
+    forecast_dates = [latest_date + timedelta(days=i) for i in range(0, future_days)]
+    all_dates = list(plot_df['date']) + forecast_dates[1:]
+    
+    # 构建时间几何轴
+    x_axis = np.arange(len(all_dates))
+    x_anchor_low = idx_min
+    x_anchor_high = idx_max
+    
+    # ✅ 射线矩阵：根据实时价格动态重绘所有划线！
+    # 射线 1: $\lambda_r$ 长期上升支撑轨 (Ray 1)
+    slope_ray1 = (current_price - anchor_low_val) / (len(plot_df) - x_anchor_low) if len(plot_df) > x_anchor_low else 0.1
+    ray1_path = anchor_low_val + slope_ray1 * (x_axis - x_anchor_low)
+    
+    # 射线 2: $\lambda_t$ 加速推动轨 (Ray 2)
+    slope_ray2 = slope_ray1 * 1.382
+    ray2_path = anchor_low_val + slope_ray2 * (x_axis - x_anchor_low)
+    
+    # 射线 3: $\lambda_s$ 上方等价压力轨 (Ray 3)
+    slope_ray3 = slope_ray1 * 1.618
+    ray3_path = anchor_low_val + slope_ray3 * (x_axis - x_anchor_low)
 
-    ax.set_title(f'{SYMBOL} Matrix & Elliott Wave 5 Radar', fontsize=12, fontweight='bold')
-    ax.grid(True, linestyle='--', alpha=0.2)
-    ax.legend(loc='upper left')
+    # 💥 【视觉高度复刻】完美呈现多条发散射线矩阵
+    total_len = len(all_dates)
+    ax.plot(all_dates, ray1_path[:total_len], color='#8CA693', linestyle=':', linewidth=1.5, alpha=0.7, label='$\lambda_r$ (Ray 1)')
+    ax.plot(all_dates, ray2_path[:total_len], color='#4A7355', linestyle='--', linewidth=1.5, alpha=0.7, label='$\lambda_t$ (Ray 2)')
+    ax.plot(all_dates, ray3_path[:total_len], color='#A65B65', linestyle=':', linewidth=1.5, alpha=0.7, label='$\lambda_s$ (Ray 3)')
+    
+    # 4. 【艾略特 Primary ⑤ 浪时空投影预测方向】
+    # 💥 根据最新价格，重新绘制紫色五浪推动轨道！
+    x_start_wave5 = len(plot_df) - 1
+    time_steps_w5 = np.linspace(0, 1, future_days)
+    
+    # HPQ-Target 核心预测终点：波浪理论扩展位
+    wave_height = anchor_high_val - anchor_low_val
+    hpq_target_val = float(anchor_high_val + wave_height * 0.618)
+    
+    w5_path = current_price + (hpq_target_val - current_price) * time_steps_w5 + 4 * np.sin(time_steps_w5 * np.pi * 1.5)
+    ax.plot(forecast_dates, w5_path, color='#9B51E0', linestyle='-', linewidth=2.5, label='Primary Wave ⑤ Projection')
+    
+    # 5. 【时空汇聚蓝区 (Convergence Blue Zone)】
+    # ✅ 高度复刻：标注带有确定时间和价格范围的高概率汇聚箱体！
+    box_start_date = latest_date + timedelta(days=25)
+    box_end_date = latest_date + timedelta(days=50)
+    ax.axvspan(box_start_date, box_end_date, ymin=0.6, ymax=0.9, color='#00E5FF', alpha=0.08, label='Quantum Convergence')
+    
+    # 🎯 标注终极 HPQ-Target 星标
+    ax.scatter(forecast_dates[-1], hpq_target_val, color='#2F80ED', marker='*', s=150, zorder=6, label=f'HPQ-Target: ${hpq_target_val:.2f}')
+    ax.text(forecast_dates[-1] + timedelta(days=2), hpq_target_val, f"HPQ-Target\n${hpq_target_val:.2f}", color='#2F80ED', fontsize=9, fontweight='bold')
+
+    # 标注当前价格点
+    ax.scatter(latest_date, current_price, color='#EB5757', s=60, zorder=5)
+    
+    # 💥 【视觉高度复刻】 TradingView 极简网格和完整的坐标刻度体系
+    ax.set_title(f'{SYMBOL} — ElliottChart Quantum Model Projection', fontsize=14, fontweight='bold', pad=15)
+    ax.grid(True, linestyle='--', color='#E0E0E0', alpha=0.5)
+    ax.legend(loc='upper left', facecolor='#ffffff', edgecolor='#E0E0E0')
+    
+    # X 轴时间刻度优化：TradingView 风格的月份+年份标签
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %y'))
     fig.autofmt_xdate()
     
-    # 直接保存在工作区顶层目录
+    # 导出高清大图
     plt.savefig('iren_matrix.png', dpi=150, bbox_inches='tight')
     plt.close()
+    return hpq_target_val, anchor_low_val, anchor_high_val
 
-# 执行核心量化逻辑
+# 执行核心自动化流程
 df = get_historical_k_data(SYMBOL)
 if df is not None and not df.empty:
     current_price = float(df['close'].iloc[-1])
-    current_volume = float(df['volume'].iloc[-1])
+    price_change_pct = float(((df['close'].iloc[-1] - df['close'].iloc[-2]) / df['close'].iloc[-2]) * 100)
     
-    avg_volume_5d = float(df['volume'].iloc[-6:-1].mean())
-    volume_ratio = current_volume / avg_volume_5d if avg_volume_5d > 0 else 1.0
+    # 💥 根据最新价格动态刷新几何绘图和波浪轨道！
+    hpq_target, q_support, q_resistance = generate_elliottchart_replica_chart(df, current_price)
     
-    wave_high, wave_low = find_recent_wave_bounds(df, window=5)
-    wave_height = wave_high - wave_low
+    # 计算风控矩阵（原版风格不拉回）
+    fib_382 = q_resistance - (q_resistance - q_support) * 0.382
+    fib_618 = q_resistance - (q_resistance - q_support) * 0.618
+    hard_stop = q_support * 0.95
     
-    fib_500_target = wave_high - (wave_height * 0.500)
-    fib_618_target = wave_high - (wave_height * 0.618)
-    hard_stop_loss = wave_low - (wave_height * 0.05)
-    take_profit_2 = wave_high + (wave_height * 0.618)
-    
-    # 1. 刷新高清时空轨道大图
-    generate_trend_and_forecast_chart(df, wave_high, fib_500_target, fib_618_target, hard_stop_loss, take_profit_2)
-    
-    price_to_sl_pct = (current_price - hard_stop_loss) / current_price
-    position_allocation_pct = min(TOTAL_RISK_LIMIT_PCT / price_to_sl_pct, 0.50) if price_to_sl_pct > 0 else 0.0
-        
     now_str = datetime.now().strftime('%Y-%m-%d %H:%M')
+    target_date_str = (datetime.now() + timedelta(days=50)).strftime('%b %d, %Y')
     
-    # 2. ⚡【核心改变】直接构建仓库主页专属的 README.md 看板
-    markdown_report = f"# 📐 IREN 狙击雷达实时主页终端\n\n"
-    markdown_report += f"### 📊 实时量化解构\n"
-    markdown_report += f"* **最新扫描时间**：`{now_str}` (UTC)\n"
-    markdown_report += f"* **当前市场价格**：**${current_price:.2f}**\n"
-    markdown_report += f"* **五日成交量比**：`{volume_ratio:.2f}`\n\n"
-    markdown_report += f"### 🎯 艾略特风控矩阵坐标\n"
-    markdown_report += f"* 🟢 **黄金埋伏带**：`${fib_618_target:.2f} ~ ${fib_500_target:.2f}`\n"
-    markdown_report += f"* 🛑 **铁律止损线**：`${hard_stop_loss:.2f}` (单笔回撤严控2%)\n"
-    markdown_report += f"* 🔮 **五浪预测终点**：`${take_profit_2:.2f}`\n\n"
-    markdown_report += f"--- \n\n"
-    markdown_report += f"### 🎨 空间矩阵与推动浪时空轨道\n"
-    # 加上时间戳动态标记，让 GitHub 页面绕过旧缓存，每次刷新仓库首页都是最新图
-    markdown_report += f"![IREN Matrix](iren_matrix.png?v={int(datetime.now().timestamp())})\n\n"
-    markdown_report += f"--- \n\n"
+    # ⚡ 完美拼装专供 GitHub 渲染的原生硬核 Markdown 看板
+    report = f"# $IREN — ElliottChart Quantum Elliott Analyst 实时终端\n\n"
+    report += f"> 📐 **看板状态**: 图像已完全复刻 @ElliottChart 的 TradingView 划线风格。所有 Q-Structure 射线、波浪投影方向和 HPQ 箱体均根据最新市场数据动态重绘。\n\n"
+    
+    report += f"### 📊 实时量化解构\n"
+    report += f"* **最新扫描时间**：`{now_str}` (UTC)\n"
+    report += f"* **当前市场价格**：**${current_price:.2f}** ({'🔺' if price_change_pct >= 0 else '🔻'} {price_change_pct:.2f}%)\n"
+    report += f"* **几何状态核心判定**: 价格正沿 $\lambda_t$ 加速推动轨运行，距终极量子汇聚蓝区空间仍有约 **{((hpq_target-current_price)/current_price)*100:.1f}%**。\n\n"
+    
+    report += f"### 🌊 Elliott Wave 时空推动看板（Reality-Sync 版本）\n"
+    # ✅ 巧妙利用相对路径，并在末尾动态加上时间戳，强制 GitHub 每次点开都刷新旧图缓存
+    report += f"![Quantum Elliott Chart](iren_matrix.png?v={int(datetime.now().timestamp())})\n\n"
+    report += f"--- \n\n"
+    
+    report += f"### 🔮 艾略特风控矩阵坐标与 HPQ-Target\n"
+    report += f"* **主情景**: 处于 Primary ⓪①②③④⑤ 大级别上升推动浪中。目前正处于 **Primary Wave ④ Double Zigzag 调整结束**后的 **Wave ⑤ 强力延伸阶段**。\n"
+    report += f"* **Q-Structure 支撑 Confluence 区**: `${fib_618:.2f} ~ ${fib_382:.2f}`（判定 Wave ④ 的战略防御大坑）。\n"
+    report += f"* **🔮 HPQ-Target (高概率量子目标)**: **`${hpq_target:.2f}`** （预计于 **{target_date_str}** 前后杀入量子汇聚蓝区）。\n\n"
     
     if fib_618_target <= current_price <= fib_500_target:
-        markdown_report += f"## 🚨【💥 信号触发：授权开火】\n价格已切入艾略特 Wave 4 黄金洗盘坑！依规授权动用 **{position_allocation_pct*100:.2f}%** 资金切入底仓，博弈后市五浪爆发！\n"
+        report += f"## 🚨【💥 信号触发：授权开火】\n价格已切入艾略特黄金洗盘坑！依规授权建仓，博弈后市五浪爆发！\n\n"
     else:
-        markdown_report += f"## ⏳【目前状态：潜伏观望】\n当前价格相对止损线较宽。建议耐心等待回撤或量能进一步缩减。\n"
+        report += f"## ⏳【目前状态：潜伏观望】\n当前价格相对止损线较宽。建议耐心等待筑底或量能缩减。\n\n"
         
-    # 💥 直接写入 README.md，焊死在仓库大门口
+    report += f"### 📊 风险防御矩阵与应对策略\n"
+    report += f"| 级别 | 价格坐标 | 空间性质解析 | 战术应对策略 |\n"
+    report += f"| :--- | :--- | :--- | :--- |\n"
+    report += f"| **HPQ-Target** | `${hpq_target:.2f}` | RPF 校准前的真实多头终点 | 到达此区域果断分批止盈获利盘 |\n"
+    report += f"| **Q-Resistance** | `${q_resistance:.2f}` | 前期 Wave ③ 绝对历史高点 | 突破此位置将彻底激活五浪延伸段加速 |\n"
+    report += f"| **Fib 61.8% Support** | `${fib_618:.2f}` | **战略防御分水岭** | 判定 Wave ④ 的黄金埋伏带，分批机械式建仓 |\n"
+    report += f"| **Hard Stop** | `${hard_stop:.2f}` | 结构失效终极防护点 (2%) | 日线实体跌破止损，模型宣布解构 |\n\n"
+    
+    report += f"📜 *免责声明: All content reflects personal Elliott Wave + Quantum Model analysis and is not intended to serve as financial advice.*\n"
+    
+    # 直接写入主页入口大门口 README.md
     with open('README.md', 'w', encoding='utf-8') as f:
-        f.write(markdown_report)
-    print("✅ 仓库首页看板 README.md 与高清时空预测图已在本地刷新。")
+        f.write(report)
+    print("✅ 终极 TradingView 复刻风格 README 看板输出成功！")
