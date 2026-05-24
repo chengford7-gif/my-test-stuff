@@ -5,7 +5,7 @@ import numpy as np
 from datetime import datetime, timedelta
 import os
 
-# 💥 强制切换 matplotlib 为 Headless 渲染模式，防止在云端 Linux 服务器上因找不到显示硬件而报错
+# 💥 强制切换 matplotlib 为 Headless 渲染模式，防止在云端 Linux 服务器上报错
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -45,7 +45,7 @@ def find_recent_wave_bounds(df, window=5):
 
 def generate_trend_and_forecast_chart(df, wave_high, fib_500, fib_618, hard_loss, tp2):
     plot_df = df.tail(60).copy()
-    fig, ax = plt.subplots(figsize=(11, 5.5)) # 完美适配 GitHub 网页与手机 App 的原生横屏显示比例
+    fig, ax = plt.subplots(figsize=(11, 5.5)) # 完美适配 GitHub 网页与手机 App 原生渲染的大宽屏
     
     # 绘制历史收盘实盘线
     ax.plot(plot_df['date'], plot_df['close'], label='IREN Close Price', color='#1f77b4', linewidth=2.5)
@@ -74,7 +74,7 @@ def generate_trend_and_forecast_chart(df, wave_high, fib_500, fib_618, hard_loss
     ax.legend(loc='upper left')
     fig.autofmt_xdate()
     
-    # 直接保存在工作区，等待 GitHub Actions 自动推回仓库核心目录
+    # 直接保存在工作区顶层目录
     plt.savefig('iren_matrix.png', dpi=150, bbox_inches='tight')
     plt.close()
 
@@ -103,8 +103,8 @@ if df is not None and not df.empty:
         
     now_str = datetime.now().strftime('%Y-%m-%d %H:%M')
     
-    # 2. 构建最适合手机 GitHub App/网页版原生渲染的超级 Markdown 交互式面板
-    markdown_report = f"# 📐 IREN 狙击雷达实时终端\n\n"
+    # 2. ⚡【核心改变】直接构建仓库主页专属的 README.md 看板
+    markdown_report = f"# 📐 IREN 狙击雷达实时主页终端\n\n"
     markdown_report += f"### 📊 实时量化解构\n"
     markdown_report += f"* **最新扫描时间**：`{now_str}` (UTC)\n"
     markdown_report += f"* **当前市场价格**：**${current_price:.2f}**\n"
@@ -115,16 +115,16 @@ if df is not None and not df.empty:
     markdown_report += f"* 🔮 **五浪预测终点**：`${take_profit_2:.2f}`\n\n"
     markdown_report += f"--- \n\n"
     markdown_report += f"### 🎨 空间矩阵与推动浪时空轨道\n"
-    # 巧妙利用防缓存标记，确保你在 GitHub 里每次点开都是最新生成的图片，而不是旧缓存
+    # 加上时间戳动态标记，让 GitHub 页面绕过旧缓存，每次刷新仓库首页都是最新图
     markdown_report += f"![IREN Matrix](iren_matrix.png?v={int(datetime.now().timestamp())})\n\n"
     markdown_report += f"--- \n\n"
     
     if fib_618_target <= current_price <= fib_500_target:
-        markdown_report += f"## 🚨【💥 信号触发：授权开火】\n价格已切入艾略特 Wave 4 黄金洗盘坑！依规授权动用 **{position_allocation_pct*100:.2f}%** 底仓，博弈后市五浪爆发！\n"
+        markdown_report += f"## 🚨【💥 信号触发：授权开火】\n价格已切入艾略特 Wave 4 黄金洗盘坑！依规授权动用 **{position_allocation_pct*100:.2f}%** 资金切入底仓，博弈后市五浪爆发！\n"
     else:
         markdown_report += f"## ⏳【目前状态：潜伏观望】\n当前价格相对止损线较宽。建议耐心等待回撤或量能进一步缩减。\n"
         
-    # 直接复写 data_log.txt 成为主看板
-    with open('data_log.txt', 'w', encoding='utf-8') as f:
+    # 💥 直接写入 README.md，焊死在仓库大门口
+    with open('README.md', 'w', encoding='utf-8') as f:
         f.write(markdown_report)
-    print("✅ 专属战报与核心预测大图已在本地刷新完毕。")
+    print("✅ 仓库首页看板 README.md 与高清时空预测图已在本地刷新。")
