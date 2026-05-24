@@ -1,10 +1,9 @@
-import requests
+import yfinance as yf
 import pandas as pd
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
 from datetime import datetime, timedelta
 import sys
 
@@ -13,97 +12,99 @@ OUTPUT_FILE = "iren_quantum_v5.png"
 RPF = 0.28
 
 
-def get_macro_weekly_data(symbol):
-    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?range=3y&interval=1wk"
-    headers = {'User-Agent': 'Mozilla/5.0'}
-    try:
-        response = requests.get(url, headers=headers, timeout=15)
-        data = response.json()
-        result = data['chart']['result'][0]
-        df = pd.DataFrame({
-            'date': pd.to_datetime(result['timestamp'], unit='s'),
-            'close': result['indicators']['quote'][0]['close'],
-            'high': result['indicators']['quote'][0]['high'],
-            'low': result['indicators']['quote'][0]['low'],
-            'volume': result['indicators']['quote'][0]['volume']
-        })
-        return df.dropna().reset_index(drop=True)
-    except Exception as e:
-        print(f"❌ 数据获取失败: {e}")
+def get_data(symbol):
+    print("\ud83d\udd04 Fetching latest data...")
+    df = yf.download(symbol, period="18mo", interval="1wk", progress=False)
+    if df.empty:
+        print("\u274c Failed to fetch data")
         sys.exit(1)
+    df = df.reset_index()
+    df.columns = [col[0] if isinstance(col, tuple) else col for col in df.columns]
+    return df
 
 
-def generate_calibrated_chart(df, current_price):
-    print("🎨 正在生成专业版校准图表（接近ElliottChart风格）...")
+def generate_projection_chart(df, current_price):
+    print("\ud83c\udfa8 Generating forward-looking Quantum Projection chart...")
     
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(16, 10), 
-                                    gridspec_kw={'height_ratios': [4, 1]}, 
-                                    sharex=True)
+    fig, ax = plt.subplots(figsize=(14, 8))
     
-    # 主图 - 价格
-    ax1.plot(df['date'], df['close'], color='black', linewidth=1.8, label='IREN Price')
-    ax1.set_yscale('log')
+    # Plot recent price
+    ax.plot(df['Date'], df['Close'], color='black', linewidth=2.0, label='IREN Weekly Close')
+    ax.set_yscale('log')
     
-    # Q-Structure 射线模拟（可后续替换为真实模型值）
-    ax1.axhline(y=44.5, color='#00AA00', linestyle='--', linewidth=1.3, alpha=0.75, label='Q-Structure λ₄ Support')
-    ax1.axhline(y=105, color='#FF8800', linestyle='--', linewidth=1.6, alpha=0.85)
-    ax1.axhline(y=133.33, color='#0066FF', linestyle='--', linewidth=1.8, alpha=0.9)
+    # Current price marker
+    ax.axhline(y=current_price, color='red', linestyle='--', linewidth=1.2, alpha=0.7)
+    ax.text(df['Date'].iloc[-1] + timedelta(days=10), current_price * 1.08, 
+            f'Current: ${current_price}', fontsize=10, color='red', fontweight='bold')
     
-    # Elliott Wave 标注
-    ax1.annotate('① Leading Diagonal', xy=(df['date'].iloc[25], 8.5), fontsize=9, color='#006600', fontweight='bold')
-    ax1.annotate('② Zigzag', xy=(df['date'].iloc[75], 5.8), fontsize=9, color='#006600')
-    ax1.annotate('③', xy=(df['date'].iloc[135], 76), fontsize=12, color='blue', fontweight='bold')
-    ax1.annotate('④ Double Zigzag', xy=(df['date'].iloc[155], 31), fontsize=9, color='#006600')
-    ax1.annotate('⑤', xy=(df['date'].iloc[-8], current_price * 1.15), fontsize=13, color='red', fontweight='bold')
+    # --- Forward Projection (from now) ---
+    last_date = df['Date'].iloc[-1]
+    future_weeks = 52  # ~12 months
     
-    # HPQ & Q-Target 醒目标注
-    ax1.annotate('HPQ-Target $133.33\n(Early July | RPF Calibrated)', 
-                 xy=(df['date'].iloc[-1], 133.33), 
-                 xytext=(25, 45), textcoords='offset points',
-                 fontsize=10, color='#0033AA', fontweight='bold',
-                 bbox=dict(boxstyle="round,pad=0.45", facecolor="#fffde7", edgecolor="#1565C0", alpha=0.95),
-                 arrowprops=dict(arrowstyle="->", color='#1565C0', lw=1.2))
+    future_dates = [last_date + timedelta(weeks=i) for i in range(1, future_weeks + 1)]
     
-    ax1.annotate('Q-Target $249.99\n(Mid Oct | Potential Extension)', 
-                 xy=(df['date'].iloc[-1], 250), 
-                 xytext=(25, 70), textcoords='offset points',
-                 fontsize=10, color='#B71C1C', fontweight='bold',
-                 bbox=dict(boxstyle="round,pad=0.45", facecolor="#ffebee", edgecolor="#C62828", alpha=0.95),
-                 arrowprops=dict(arrowstyle="->", color='#C62828', lw=1.2))
+    # Simple but structured projection (you can replace with real model later)
+    # Assume Wave (3) extension
+    wave3_target = 133.0
+    wave3_mid = 105.0
     
-    # 当前结构高亮区域
-    ax1.axvspan(df['date'].iloc[-35], df['date'].iloc[-1], alpha=0.07, color='blue')
+    # Create a smooth projection curve
+    proj_prices = []
+    for i in range(future_weeks):
+        progress = i / future_weeks
+        # S-curve like impulsive move
+        price = current_price + (wave3_target - current_price) * (progress ** 0.7)
+        proj_prices.append(price)
     
-    # 左上信息框（模仿ElliottChart）
-    info_text = (
-        "IREN — Quantum Model Projection\n"
-        "Bullish Outlook | Primary Wave⑤ Extension\n"
-        f"HPQ-Target → $133.33 | RPF={RPF}\n"
-        f"Current: ${current_price} | {datetime.now().strftime('%Y-%m-%d')}"
+    ax.plot(future_dates, proj_prices, color='#FF6B00', linewidth=2.5, linestyle='--', label='Projected Impulsive Wave (3)')
+    
+    # Key Targets
+    ax.axhline(y=105, color='#1E88E5', linestyle=':', linewidth=1.8, alpha=0.85)
+    ax.text(future_dates[15], 108, 'HPQ Zone $105', fontsize=10, color='#1E88E5', fontweight='bold')
+    
+    ax.axhline(y=133, color='#D32F2F', linestyle=':', linewidth=2.0, alpha=0.9)
+    ax.text(future_dates[30], 138, 'HPQ-Target $133.33', fontsize=11, color='#D32F2F', fontweight='bold')
+    
+    # Q-Structure reference levels
+    ax.axhline(y=44.5, color='#43A047', linestyle='--', linewidth=1.3, alpha=0.6)
+    ax.text(df['Date'].iloc[-20], 46, 'Q-Structure \u03bb\u2084 Support (~$44.5)', fontsize=9, color='#2E7D32')
+    
+    # Wave structure labels on projection
+    ax.annotate('Int Wave (3)\nImpulsive Extension', xy=(future_dates[18], 85), fontsize=9.5, 
+                color='#E65100', fontweight='bold',
+                bbox=dict(boxstyle="round,pad=0.4", facecolor="#FFF3E0", edgecolor='#FF6B00', alpha=0.9))
+    
+    ax.annotate('Potential Wave (5)\nExtension Zone', xy=(future_dates[42], 160), fontsize=9, 
+                color='#B71C1C', style='italic')
+    
+    # Title and Info
+    ax.set_title("IREN — Quantum Reality Model | Forward Projection (May 2026 → May 2027)", 
+                 fontsize=14, fontweight='bold', pad=12)
+    
+    info = (
+        f"Current: ${current_price}   |   RPF = {RPF}\n"
+        "Structure: Primary ⑤ Extension → Int Wave (3) in progress\n"
+        "Timeframe: Next 12 months | Log Scale"
     )
-    ax1.text(0.015, 0.97, info_text, transform=ax1.transAxes, fontsize=9.5,
-             verticalalignment='top', fontfamily='monospace',
-             bbox=dict(boxstyle="round,pad=0.6", facecolor="white", edgecolor="#424242", alpha=0.97))
+    ax.text(0.02, 0.97, info, transform=ax.transAxes, fontsize=9,
+            verticalalignment='top', fontfamily='monospace',
+            bbox=dict(boxstyle="round,pad=0.5", facecolor="white", edgecolor="gray", alpha=0.95))
     
-    ax1.set_title("IREN LIMITED - Weekly | Calibrated ElliottChart Style", fontsize=13, fontweight='bold', pad=15)
-    ax1.set_ylabel("Price (log)")
-    ax1.grid(True, which="both", linestyle="--", alpha=0.35)
-    ax1.legend(loc='upper left', fontsize=8)
+    ax.set_ylabel("Price (USD, log scale)")
+    ax.grid(True, which="both", linestyle="--", alpha=0.35)
+    ax.legend(loc='upper left', fontsize=9)
     
-    # 成交量
-    ax2.bar(df['date'], df['volume'], color='#90EE90', alpha=0.55, width=6)
-    ax2.set_ylabel("Volume")
-    ax2.grid(True, alpha=0.3)
-    
+    # X-axis formatting
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
     plt.xticks(rotation=45, ha='right')
+    
     plt.tight_layout()
     plt.savefig(OUTPUT_FILE, dpi=300, bbox_inches='tight', facecolor='white')
     plt.close()
-    print(f"✅ 专业版图表已生成: {OUTPUT_FILE}")
+    print(f"\u2705 Projection chart saved: {OUTPUT_FILE}")
 
 
-# 执行
-df = get_macro_weekly_data(SYMBOL)
-if df is not None and not df.empty:
-    current_price = round(float(df['close'].iloc[-1].item()), 2)
-    generate_calibrated_chart(df, current_price)
+# Run
+df = get_data(SYMBOL)
+current_price = round(float(df['Close'].iloc[-1].item()), 2)
+generate_projection_chart(df, current_price)
