@@ -25,7 +25,7 @@ jobs:
     - name: Set up Python 3.10
       uses: actions/setup-python@v5
       with:
-        python-level: '3.10'
+        python-version: '3.10'
         cache: 'pip'
 
     # 第三步：极速安装量化跑图依赖组件
@@ -34,28 +34,30 @@ jobs:
         python -m pip install --upgrade pip
         pip install requests pandas numpy matplotlib
 
-    # 第四步：物理清理历史残留旧图（彻底腾出空间，防止 Camo 混淆）
+    # 第四步：物理清理历史残留旧图（彻底腾出空间，强行粉碎 GitHub Camo 缓存）
     - name: Purge Legacy Assets
       run: |
         rm -f iren_matrix.png
         rm -f iren_quantum_live.png
+        rm -f iren_quantum_v3.png
+        rm -f iren_quantum_v4.png
 
-    # 第五步：雷霆出击！运行 catcher 脚本，生成新 README 并绘制带节点股价的橙色虚线图
+    # 第五步：运行 catcher 脚本，生成新 README 并自适应绘图
     - name: Execute Quantum Matrix Catcher
       run: |
         python catcher
 
-    # 第六步：💥 全资产追踪并强行推送回你的 GitHub 仓库主页
+    # 第六步：全资产追踪并强行推送回你的 GitHub 仓库主页
     - name: Commit and Push Terminal Updates
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action Terminal"
         
-        # 使用 -A 强行捕获文件更名、删除和全新生成的 iren_quantum_v3.png 资产
+        # 使用 -A 强行捕获文件更名、删除和全新生成的 iren_quantum_v5.png 资产
         git add -A
         
         # 即使这次价格没变、没有任何文件产生修改，也静默通过，绝不抛错
-        git commit -m "🤖 Quantum Terminal: Synced Elliott Wave ⑤ orange tracks & prices" || echo "No changes to commit"
+        git commit -m "🤖 Quantum Terminal: Synced v5 structural dual-charts & RPF factors" || echo "No changes to commit"
         
         # 轰油门推流
         git push
