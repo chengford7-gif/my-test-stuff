@@ -3,7 +3,7 @@ name: Update IREN Quantum Model Dashboard
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 0 * * *'
+    - cron: '0 0 * * *' # 每天北京时间早8点运行
 
 jobs:
   build-and-update:
@@ -27,20 +27,15 @@ jobs:
     - name: Run Script
       run: |
         python catcher.py
-        # 这一步很重要：手动检查图片是否生成或更新
-        echo "--- 📋 检查图片状态 ---"
-        ls -lh iren_quantum_v5.png
-        echo "-----------------------"
 
     - name: Commit and Push Changes
       run: |
         git config --global user.name 'github-actions[bot]'
         git config --global user.email 'github-actions[bot]@users.noreply.github.com'
         
-        # 强制查看 Git 状态，这能告诉我它到底有没有检测到文件改动
-        git status
+        # 强制添加这两个文件
+        git add iren_quantum_v5.png README.md
         
-        git add .
-        # 如果没有改动，打印提示，而不是静默忽略
-        git commit -m "Update Quantum Model Chart [Bot]" || echo "【诊断信息】Git 检测到没有文件变动，无需提交"
+        # 即使只有 README 时间变了，也能提交成功
+        git commit -m "Auto-Update: IREN Quantum Dashboard $(date +'%Y-%m-%d %H:%M:%S')"
         git push
