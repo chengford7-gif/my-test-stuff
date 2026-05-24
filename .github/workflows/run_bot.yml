@@ -19,17 +19,18 @@ jobs:
       with:
         python-version: '3.10'
 
-    - name: Debug: List all files
+    - name: Locate and Run Script
       run: |
-        echo "--- 📋 当前仓库文件树 ---"
-        ls -R
+        echo "--- 📋 当前目录结构 ---"
+        find . -name "catcher.py"
         echo "--------------------------"
-
-    - name: Install Dependencies
-      run: |
-        pip install requests pandas numpy matplotlib
-
-    - name: Run Quantum Model Engine
-      run: python catcher.py
-      # 如果你的 catcher.py 不在根目录，请在这里加上工作目录路径，例如：
-      # working-directory: ./子目录名
+        
+        # 自动获取 catcher.py 的真实路径并运行
+        SCRIPT_PATH=$(find . -name "catcher.py" | head -n 1)
+        if [ -z "$SCRIPT_PATH" ]; then
+          echo "❌ 错误：在仓库中找不到 catcher.py"
+          exit 1
+        else
+          echo "✅ 找到文件: $SCRIPT_PATH"
+          python "$SCRIPT_PATH"
+        fi
