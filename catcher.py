@@ -1,75 +1,73 @@
 import os
 import sys
 import pandas as pd
-import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from datetime import datetime
 import yfinance as yf
+import traceback
 
 # ==================== 配置 ====================
 SYMBOL = "IREN"
-OUTPUT_FILE = "iren_quantum_vs.png"
+OUTPUT_FILE = "iren_quantum_v5.png"  # 修正了文件名后缀，保持统一
 RPF = 0.28
 CURRENT_WAVE = "Int Wave (3) impulsive | 2026.10-11 BTC喇叭口共振"
 
+def get_safe_index(data, offset):
+    """防止索引越界：如果数据不足，返回第一个索引"""
+    if len(data) > abs(offset):
+        return data.index[offset]
+    return data.index[0]
+
 def fetch_latest_data():
-    """实时抓取 IREN 和 BTC 数据（已修复 Series 问题）"""
     print("🔄 正在抓取最新数据...")
+    # 使用 yfinance 获取数据
     iren_data = yf.download(SYMBOL, period="2y", interval="1d", progress=False)
     btc_data = yf.download("BTC-USD", period="2y", interval="1d", progress=False)
     
-    # 【关键修复】使用 .values[-1] 保证一定是标量
-    current_price = round(float(iren_data['Close'].values[-1]), 2)
-    btc_price = round(float(btc_data['Close'].values[-1]), 0)
+    if iren_data.empty:
+        raise ValueError("无法获取 IREN 数据，请检查 API 状态")
+
+    # 强制转为 Python 原生标量，彻底消灭数组转换报错
+    current_price = round(float(iren_data['Close'].iloc[-1]), 2)
+    btc_price = round(float(btc_data['Close'].iloc[-1]), 0)
     
     print(f"✅ IREN 当前价: ${current_price} | BTC: ${btc_price}")
     return iren_data, btc_data, current_price, btc_price
 
 def generate_calibrated_chart(iren_data, current_price, btc_price):
-    """生成校准后专业图表"""
     print("🎨 正在生成校准图表...")
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 9), gridspec_kw={'height_ratios': [3.5, 1]}, sharex=True)
     
     ax1.plot(iren_data.index, iren_data['Close'], color='black', linewidth=2.5, label='IREN Price')
     
-    # 历史标注
-    ax1.annotate('③ $76.87', xy=(iren_data.index[-300], 76.87), xytext=(10, 10),
+    # 动态安全标注
+    idx_300 = get_safe_index(iren_data, -300)
+    idx_150 = get_safe_index(iren_data, -150)
+    idx_last = iren_data.index[-1]
+    
+    ax1.annotate('③ $76.87', xy=(idx_300, 76.87), xytext=(10, 10),
                  textcoords='offset points', arrowprops=dict(arrowstyle='->'), fontsize=11, color='blue')
-    ax1.annotate('④ $30.76', xy=(iren_data.index[-150], 30.76), xytext=(10, -20),
+    ax1.annotate('④ $30.76', xy=(idx_150, 30.76), xytext=(10, -20),
                  textcoords='offset points', arrowprops=dict(arrowstyle='->'), fontsize=11, color='blue')
     
-    # 当前价格
-    ax1.annotate(f'Now: ${current_price}', xy=(iren_data.index[-1], current_price),
+    # 当前价
+    ax1.annotate(f'Now: ${current_price}', xy=(idx_last, current_price),
                  xytext=(20, -30), textcoords='offset points', fontsize=12, color='red',
                  bbox=dict(boxstyle="round,pad=0.3", facecolor="yellow", alpha=0.9))
     
-    # 校准目标
+    # 水平线逻辑
     ax1.axhline(y=81.5, color='orange', linestyle='--', linewidth=1.5, alpha=0.8)
-    ax1.annotate('(3) $81.50\n(校准后)', xy=(iren_data.index[-1], 81.5), xytext=(20, 10),
-                 textcoords='offset points', fontsize=11, color='darkorange')
-    
     ax1.axhline(y=105, color='orange', linestyle='--', linewidth=1.5, alpha=0.8)
-    ax1.annotate('HPQ: $105 (RPF=0.28)', xy=(iren_data.index[-1], 105), xytext=(20, 40),
-                 textcoords='offset points', fontsize=12, color='blue', fontweight='bold')
-    
     ax1.axhline(y=133, color='orange', linestyle='--', linewidth=1.5, alpha=0.6)
-    ax1.annotate('极限区 $133', xy=(iren_data.index[-1], 133), xytext=(20, 70),
-                 textcoords='offset points', fontsize=11, color='darkred')
     
-    ax1.plot([iren_data.index[-200], iren_data.index[-1]], [44, 105], color='green', linestyle='-', linewidth=1.5, alpha=0.7, label='Q-Structure λ₄ → λ₁')
-    
-    ax1.set_title(
-        f'$IREN — Calibrated Quantum Elliott Model (RPF={RPF})\n'
-        f'({CURRENT_WAVE})',
-        fontsize=14, 
-        fontweight='bold'
-    )
+    ax1.set_title(f'$IREN — Calibrated Quantum Elliott Model (RPF={RPF})\n({CURRENT_WAVE})', fontsize=14, fontweight='bold')
     ax1.set_ylabel('Price ($)')
     ax1.grid(True, alpha=0.3)
     ax1.legend()
 
+    # 交易量
     ax2.bar(iren_data.index, iren_data['Volume'], color='lightgreen', alpha=0.7, width=0.8)
     ax2.set_ylabel('Volume')
     ax2.grid(True, alpha=0.3)
@@ -80,35 +78,19 @@ def generate_calibrated_chart(iren_data, current_price, btc_price):
     plt.close()
     print(f"✅ 图表生成完成 → {OUTPUT_FILE}")
 
-def update_readme(current_price):
-    """更新 README.md"""
-    content = f"""# IREN Quantum Calibrated Predictor
-
-**实时状态**（{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} UTC+8）
-
-- **当前价格**：**${current_price}**
-- **模型**：Calibrated Quantum Elliott Model (RPF=0.28)
-- **波浪结构**：Primary ⑨ Extension → {CURRENT_WAVE}
-- **共振窗口**：**2026年10月–11月**（$105–133 + BTC 130k+ 喇叭口顶）
-- **校准目标**：HPQ $105（原$133.33）
-
-![IREN Quantum Dashboard](iren_quantum_vs.png)
-
----
-由 GitHub Actions 每日自动更新 | 基于 @ElliottChart + tradermige 周期共振
-"""
-    with open("README.md", "w", encoding="utf-8") as f:
-        f.write(content)
-    print("✅ README.md 更新完成")
-
 def run_pipeline():
     try:
         iren_data, btc_data, current_price, btc_price = fetch_latest_data()
         generate_calibrated_chart(iren_data, current_price, btc_price)
-        update_readme(current_price)
+        
+        # 更新 README
+        with open("README.md", "w", encoding="utf-8") as f:
+            f.write(f"# IREN Quantum Calibrated Predictor\n\n**实时状态** ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')} UTC)\n\n"
+                    f"- **当前价格**: **${current_price}**\n"
+                    f"![Dashboard]({OUTPUT_FILE})")
         print("🎉 全部任务完成！")
     except Exception as e:
-        print(f"❌ 运行出错: {e}")
+        traceback.print_exc()
         sys.exit(1)
 
 if __name__ == "__main__":
