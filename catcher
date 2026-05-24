@@ -70,46 +70,39 @@ def generate_calibrated_tradingview_chart(df):
     ax.text(latest_date + timedelta(weeks=1), current_price, f" Now: $56.83 ", color='#ffffff', 
             bbox=dict(facecolor='#E74C3C', edgecolor='none', boxstyle='square,pad=0.3'), fontsize=9, fontweight='bold', va='center')
     
-    # 未来扩展轴
-    future_weeks = 36
+    # 未来扩展轴：右侧拓宽，确保标签有充足的物理空间展示
+    future_weeks = 40
     forecast_dates = [latest_date + timedelta(weeks=i) for i in range(0, future_weeks + 1)]
-    all_dates = list(df['date']) + forecast_dates[1:]
+    x_min = df['date'].iloc[20]
+    x_max = forecast_dates[-1] + timedelta(weeks=4)
     
-    # 💥 【重磅新增】：宏观 ③ -> ④ 斐波那契回撤超级细线网格
-    # 计算波幅
+    # 💥 【重磅优化一】：将斐波那契回撤网格向左挪动，给高位目标标签腾出右侧跑道
     wave_range = w3_val - w4_val
     fib_levels = [0.0, 0.236, 0.382, 0.500, 0.618, 0.786, 1.0]
-    
-    # 设定适合 TradingView 的高雅低饱和度灰色调
     fib_colors = ['#7F8C8D', '#95A5A6', '#BDC3C7', '#BDC3C7', '#95A5A6', '#7F8C8D', '#7F8C8D']
     
-    # 获取绘图区的左右边界时间戳，以便让细线完美贯穿
-    x_min, x_max = df['date'].iloc[20], forecast_dates[-1] + timedelta(weeks=12)
-    
     for level, color in zip(fib_levels, fib_colors):
-        # 斐波那契回撤计算公式：从高点往下减去波幅的百分比
         fib_price = w3_val - (level * wave_range)
-        
-        # 1. 绘制贯穿全图的超级细虚线 (linewidth=0.5, alpha=0.6)
-        ax.axhline(y=fib_price, color=color, linestyle=':', linewidth=0.5, alpha=0.6, zorder=1)
-        
-        # 2. 在图表右侧边缘（轴外侧不远处）精准打印比例和价格
+        # 绘制贯穿虚线
+        ax.axhline(y=fib_price, color=color, linestyle=':', linewidth=0.5, alpha=0.5, zorder=1)
+        # 将 Fib 的文字标记放置在时间轴中段（Jan 27 前后），防止与最右侧的价格轴标签对撞
         fib_text = f"Fib {level:.3f} (${fib_price:.2f})"
-        ax.text(forecast_dates[-1] + timedelta(weeks=1.5), fib_price, fib_text, 
-                color='#555555', fontsize=7.5, va='bottom', ha='left', alpha=0.8)
+        ax.text(forecast_dates[-1] - timedelta(weeks=8), fib_price * 1.02, fib_text, 
+                color='#7F8C8D', fontsize=7.5, va='bottom', ha='right', alpha=0.7)
 
     # 绘制等价射线群（Q-Structure 纯细几何线矩阵）
+    all_dates = list(df['date']) + forecast_dates[1:]
     x_idx = np.arange(len(all_dates))
     ray_base_idx = 15
     ray_top = 1.2 + 0.015 * (x_idx - ray_base_idx)
     ray_mid = 1.2 + 0.011 * (x_idx - ray_base_idx)
     ray_bot = 1.2 + 0.007 * (x_idx - ray_base_idx)
     
-    ax.plot(all_dates, np.exp(ray_top), color='#9B59B6', linestyle=':', linewidth=0.8, alpha=0.5)
+    ax.plot(all_dates, np.exp(ray_top), color='#9B59B6', linestyle=':', linewidth=0.8, alpha=0.4)
     ax.plot(all_dates, np.exp(ray_mid), color='#27AE60', linestyle='--', linewidth=0.8, alpha=0.4)
     ax.plot(all_dates, np.exp(ray_bot), color='#9B59B6', linestyle='-.', linewidth=0.8, alpha=0.3)
     
-    # 微观子浪与校准目标
+    # 💥 微观子浪高亮校准
     t_w3 = forecast_dates[10]
     t_w4 = forecast_dates[18]
     t_w5 = forecast_dates[-1]
@@ -117,12 +110,26 @@ def generate_calibrated_tradingview_chart(df):
     ax.text(t_w3, 81.50 * 1.05, "(3)\n$81.50", color='#2980B9', fontsize=9, fontweight='bold', ha='center')
     ax.text(t_w4, 64.80 * 0.93, "(4)\n$64.80", color='#2980B9', fontsize=9, fontweight='bold', ha='center')
     
-    # 右侧边缘坐标横向对齐电子标签
-    x_edge = forecast_dates[-1] + timedelta(weeks=18) # 留出空间给 Fib 标签
-    ax.text(x_edge, 105.00, " HPQ: $105.00 \nCalibrated RPF=0.28", color='#ffffff', 
-            bbox=dict(facecolor='#1F4E79', edgecolor='none', boxstyle='square,pad=0.3'), fontsize=9, fontweight='bold', va='center')
-    ax.text(x_edge, 172.00, " Q-Target: $172.00 \nReality Pull-Back Applied", color='#ffffff', 
-            bbox=dict(facecolor='#34495E', edgecolor='none', boxstyle='square,pad=0.3'), fontsize=9, fontweight='bold', va='center')
+    # 💥 【重磅优化二】：将核心目标价 105.00、133.33、172.00 采用阶梯式横向指示线拉出，绝不对撞
+    # 绘制目标指导横线
+    ax.axhline(y=105.00, color='#1F4E79', linestyle='--', linewidth=0.8, alpha=0.6)
+    ax.axhline(y=133.33, color='#2980B9', linestyle='--', linewidth=0.8, alpha=0.6)
+    ax.axhline(y=172.00, color='#34495E', linestyle='--', linewidth=0.8, alpha=0.6)
+
+    # 在画布最右侧右置气泡，使用绝对对齐，确保完全暴露可见
+    x_text_anchor = forecast_dates[-1] + timedelta(weeks=1)
+    
+    # 1. 核心 HPQ 校准目标位
+    ax.text(x_text_anchor, 105.00, " HPQ: $105.00 \n (Calibrated RPF=0.28) ", color='#ffffff', zorder=5,
+            bbox=dict(facecolor='#1F4E79', edgecolor='none', boxstyle='square,pad=0.3'), fontsize=8.5, fontweight='bold', va='center')
+    
+    # 2. 原版经典大浪目标回归位 (133.33 回归！)
+    ax.text(x_text_anchor, 133.33, " HPQ-Target: $133.33 \n (Wave 5 Extension) ", color='#ffffff', zorder=5,
+            bbox=dict(facecolor='#2980B9', edgecolor='none', boxstyle='square,pad=0.3'), fontsize=8.5, fontweight='bold', va='center')
+    
+    # 3. 终极宏观大目标位
+    ax.text(x_text_anchor, 172.00, " Q-Target: $172.00 \n (Pull-Back Applied) ", color='#ffffff', zorder=5,
+            bbox=dict(facecolor='#34495E', edgecolor='none', boxstyle='square,pad=0.3'), fontsize=8.5, fontweight='bold', va='center')
 
     # 绘制微观五浪路径
     wave_x = [mdates.date2num(latest_date), mdates.date2num(t_w3), mdates.date2num(t_w4), mdates.date2num(t_w5)]
@@ -137,15 +144,15 @@ def generate_calibrated_tradingview_chart(df):
             bbox=dict(facecolor='#ffffff', edgecolor='#333333', linewidth=1.0, boxstyle='square,pad=0.4'),
             ha='center', va='top', zorder=5)
 
-    # 纵坐标轴标准对数刻度清洗
-    log_ticks = [1.00, 2.30, 5.50, 13.00, 32.00, 76.87, 100.00, 172.00, 250.00]
+    # 纵坐标轴标准对数刻度清洗，将所有核心目标价格物理编入右侧刻度尺
+    log_ticks = [1.00, 2.30, 5.50, 13.00, 32.00, 56.83, 76.87, 105.00, 133.33, 172.00, 250.00]
     ax.yaxis.set_major_locator(FixedLocator(log_ticks))
-    ax.yaxis.set_major_formatter(FixedFormatter([f"{t:.2f}" if t != 100 and t != 250 else f"{int(t)}" for t in log_ticks]))
+    ax.yaxis.set_major_formatter(FixedFormatter([f"${t:.2f}" if t in [56.83, 105.00, 133.33, 172.00] else f"{t:.2f}" if t == 76.87 else f"{int(t)}" for t in log_ticks]))
     
     ax.grid(True, which="both", linestyle=':', color='#E5E5E5', linewidth=0.7)
     ax.set_xticklabels([])
-    ax.set_xlim(x_min, x_max + timedelta(weeks=12)) # 稍微拓宽右侧给复合标签留白
-    ax.set_ylim(0.8, 350.0)
+    ax.set_xlim(x_min, x_max + timedelta(weeks=16)) # 拓宽右边距，给三枚复合电子标签留出完美的展示安全区
+    ax.set_ylim(0.8, 380.0)
     
     # ---- 【副图：底部红绿相间真实成交量】 ----
     ax_vol.set_facecolor('#ffffff')
@@ -156,7 +163,7 @@ def generate_calibrated_tradingview_chart(df):
     
     ax_vol.grid(True, linestyle=':', color='#E5E5E5', linewidth=0.7)
     ax_vol.xaxis.set_major_formatter(mdates.DateFormatter('%b %y'))
-    ax_vol.set_xlim(x_min, x_max + timedelta(weeks=12))
+    ax_vol.set_xlim(x_min, x_max + timedelta(weeks=16))
     ax_vol.set_ylim(0, df['volume'].max() * 1.1)
     
     ax.text(0.85, 0.05, "Elliott Chart", transform=ax.transAxes, fontsize=14, color='#333333', alpha=0.8, fontweight='bold')
@@ -170,32 +177,28 @@ df = get_macro_weekly_data(SYMBOL)
 if df is not None and not df.empty:
     generate_calibrated_tradingview_chart(df)
     
-    # 动态渲染带斐波那契点位的精修 README 看板
     w3_val, w4_val = 76.87, 30.76
     wave_range = w3_val - w4_val
     
     now_str = datetime.now().strftime('%Y-%m-%d %H:%M')
     report = f"# $IREN — Calibrated Quantum Elliott Model 看板\n\n"
-    report += f"> 📐 **斐波那契网格已就绪**: 当前主图已物理注入由大浪 ③ → ④ 生成的**超细斐波那契回撤射线网格**，右侧自带精确百分比与实时清算股价。\n\n"
+    report += f"> 📐 **右侧时空指示标签已修复**: 已解决右侧坐标轴重叠覆盖 Bug，**$105.00**、**$133.33**、**$172.00** 三重核心目标已采用 TradingView 阶梯轴标签模式完美挂载。\n\n"
     report += f"### 📊 现实强化校准因子\n"
     report += f"* **更新时间**：`2026-05-24`\n"
-    report += f"* **校准核心引力系数 (Calibrated RPF)**：`0.28` (Reality Pull-Back 已生效)\n"
+    report += f"* **校准核心引力系数 (Calibrated RPF)**：`0.28`\n"
     report += f"* **当前波段状态**：`Int Wave (3) Impulsive` (内部 3 浪主升驱动中)\n\n"
-    report += f"### 🌊 带有 Fib 黄金网格的纯细线量化主图\n"
+    report += f"### 🌊 完美对齐的量化主图\n"
     report += f"![Quantum Elliott Chart](iren_quantum_v5.png?v={int(datetime.now().timestamp())})\n\n"
     report += f"--- \n"
-    report += f"### 📊 动态斐波那契支撑/压力清算矩阵\n"
-    report += f"| 斐波那契点位 | 轴线精确股价 | 交易战术参考中枢 |\n"
+    report += f"### 📊 动态斐波那契及战略预期矩阵\n"
+    report += f"| 结构坐标点 | 价格位 | 交易战术参考中枢 |\n"
     report += f"| :--- | :--- | :--- |\n"
-    report += f"| **Fib 0.000 (浪③顶点)** | `${w3_val:.2f}` | 宏观前高强阻力位 |\n"
-    report += f"| **Fib 0.236 回撤轴** | `${w3_val - 0.236 * wave_range:.2f}` | 极强势拉升行情的回踩不破位 |\n"
-    report += f"| **Fib 0.382 回撤轴** | `${w3_val - 0.382 * wave_range:.2f}` | 多头主升浪换手核心蓄势带 |\n"
-    report += f"| **Fib 0.500 强弱线** | `${w3_val - 0.500 * wave_range:.2f}` | 现实多空博弈牛熊中轴线 |\n"
-    report += f"| **Fib 0.618 黄金坑** | `${w3_val - 0.618 * wave_range:.2f}` | **绝对主力防御带**，针对 250,000 USD 新主仓的机械买入区 |\n"
-    report += f"| **Fib 0.786 护城河** | `${w3_val - 0.786 * wave_range:.2f}` | 多头结构不被破坏的最后退守防线 |\n"
-    report += f"| **Fib 1.000 (浪④底点)** | `${w4_val:.2f}` | 宏观周期大底，跌破则宣告全盘解构 |\n\n"
+    report += f"| **校准 Q-Target** | `$172.00` | 施加现实拉回模型后的长线扩展终点 |\n"
+    report += f"| **原版波五扩展目标** | `$133.33` | 经典艾略特 5 浪时空强共振压力位 |\n"
+    report += f"| **核心 HPQ-Target** | `$105.00` | 经 RPF=0.28 压制修正后的第一波段清算点 |\n"
+    report += f"| **Fib 0.618 黄金坑** | `${w3_val - 0.618 * wave_range:.2f}` | **大周期绝对防御带**，针对 250,000 USD 新主仓的机械加仓区 |\n\n"
     report += f"📜 *免责声明: All content reflects personal Elliott Wave + Quantum Model analysis and is not intended to serve as financial advice.*\n"
     
     with open('README.md', 'w', encoding='utf-8') as f:
         f.write(report)
-    print("✅ 包含超细斐波那契网格及右侧标签的代源码已 100% 刷新！")
+    print("✅ 右侧多标签防对撞修正完毕，代码已完美推流！")
