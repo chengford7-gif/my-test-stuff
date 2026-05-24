@@ -19,18 +19,20 @@ jobs:
       with:
         python-version: '3.10'
 
-    - name: Locate and Run Script
+    # 核心修复：在这里安装所有需要的库
+    - name: Install Dependencies
       run: |
-        echo "--- 📋 当前目录结构 ---"
-        find . -name "catcher.py"
-        echo "--------------------------"
-        
-        # 自动获取 catcher.py 的真实路径并运行
+        python -m pip install --upgrade pip
+        pip install requests pandas numpy matplotlib
+
+    - name: Run Script
+      run: |
+        # 寻找并运行 catcher.py
         SCRIPT_PATH=$(find . -name "catcher.py" | head -n 1)
-        if [ -z "$SCRIPT_PATH" ]; then
-          echo "❌ 错误：在仓库中找不到 catcher.py"
-          exit 1
-        else
-          echo "✅ 找到文件: $SCRIPT_PATH"
+        if [ -f "$SCRIPT_PATH" ]; then
+          echo "✅ 找到并运行: $SCRIPT_PATH"
           python "$SCRIPT_PATH"
+        else
+          echo "❌ 错误：找不到 catcher.py"
+          exit 1
         fi
