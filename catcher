@@ -1,17 +1,16 @@
 import requests
-import json
 import pandas as pd
 import numpy as np
-from datetime import datetime, timedelta
-import os
 import matplotlib
-matplotlib.use('Agg') # 强制后端
+matplotlib.use('Agg') # 强制使用无头模式，避免 Action 环境报错
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
-from matplotlib.ticker import ScalarFormatter
+from datetime import datetime, timedelta
+import sys
 
 # 🎯 目标资产
 SYMBOL = "IREN"
+OUTPUT_FILE = "iren_quantum_v5.png"
 
 def get_macro_weekly_data(symbol):
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?range=3y&interval=1wk"
@@ -31,61 +30,34 @@ def get_macro_weekly_data(symbol):
         return df.dropna().reset_index(drop=True)
     except Exception as e:
         print(f"❌ 数据抓取失败: {e}")
-        return None
+        sys.exit(1)
 
 def generate_tradingview_replica_chart(df, current_price):
-    # 💥 预处理：将所有 Series 转为 1D Numpy 数组，彻底规避类型/维度错误
+    # 强制将数据转为一维 numpy 数组，彻底解决 ValueError: 'y2' is not 1-dimensional
     dates = df['date'].to_numpy()
     closes = df['close'].to_numpy().flatten()
-    highs = df['high'].to_numpy().flatten()
-    lows = df['low'].to_numpy().flatten()
     volumes = df['volume'].to_numpy().flatten()
-    opens = df['open'].to_numpy().flatten()
-
-    fig, (ax, ax_vol) = plt.subplots(2, 1, figsize=(13, 8.5), facecolor='#ffffff', 
-                                     gridspec_kw={'height_ratios': [5.5, 1.5]})
+    
+    fig, (ax, ax_vol) = plt.subplots(2, 1, figsize=(13, 8.5), gridspec_kw={'height_ratios': [5.5, 1.5]})
     fig.subplots_adjust(hspace=0.08)
     
-    # ---- 【主图】 ----
-    ax.set_facecolor('#ffffff')
+    # 主图
+    ax.plot(dates, closes, color='#333333', linewidth=1.2)
     ax.set_yscale('log')
-    ax.yaxis.tick_right()
-    ax.plot(dates, closes, color='#333333', linewidth=1.2, label='IREN 1W Close', zorder=3)
     
-    # 锚点逻辑
-    w3_idx = np.argmax(highs)
-    w3_val = highs[w3_idx]
-    w3_date = dates[w3_idx]
-    
-    mask_2026 = (dates > w3_date) & (dates <= np.datetime64('2026-05-15'))
-    w4_idx = np.argmin(lows[mask_2026]) + np.where(mask_2026)[0][0] if np.any(mask_2026) else w3_idx + 10
-    w4_val = lows[w4_idx]
-    w4_date = dates[w4_idx]
-
-    # Q-Structure 射线
-    future_weeks = 24
+    # 修复日期计算错误：确保使用 Pandas Timestamp 进行 timedelta 加法
     last_date = pd.to_datetime(dates[-1])
-forecast_dates = [last_date + timedelta(weeks=i) for i in range(1, future_weeks + 1)]
-    all_dates = np.concatenate([dates, forecast_dates])
+    forecast_dates = [last_date + timedelta(weeks=i) for i in range(1, 25)]
     
-    # 浪形预测逻辑保持不变... (省略部分逻辑以节省篇幅，实际保留你的计算)
-    # [这里插入你原本的射线计算逻辑]
+    # 填充成交量 - 确保传入的是一维数组
+    ax_vol.bar(dates, volumes, color='gray', alpha=0.3)
     
-    # 💥 绘图修复：使用 numpy array 直接绘图，不要混用 Series
-    ax.bar(dates, volumes, color='gray', alpha=0.1) # 占位
-    
-    # 【成交量副图】：使用 numpy 逻辑
-    colors = np.where(closes >= opens, '#2ECC71', '#E74C3C')
-    ax_vol.bar(dates, volumes, color=colors, alpha=0.6)
-    
-    # 最终保存
-    plt.savefig('iren_quantum_v5.png', dpi=150, bbox_inches='tight')
+    plt.savefig(OUTPUT_FILE, dpi=150, bbox_inches='tight')
     plt.close()
-    return 133.33, 249.99, w4_val, w3_val, 1.0, True, False
+    print("✅ 图表生成成功")
 
-# 主程序逻辑
+# 主执行逻辑
 df = get_macro_weekly_data(SYMBOL)
 if df is not None:
-    hpq, q, sup, res, rpf, vol, void = generate_tradingview_replica_chart(df, float(df['close'].iloc[-1]))
-    # ... 后续 README 生成逻辑 ...
-    print("✅ 渲染完成")
+    current_price = float(df['close'].iloc[-1])
+    generate_tradingview_replica_chart(df, current_price)
