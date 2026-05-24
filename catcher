@@ -5,12 +5,14 @@ import numpy as np
 from datetime import datetime, timedelta
 import os
 
+# 💥 强制切换 matplotlib 为 Headless 静态渲染模式
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-import matplotlib.dates mdates
+import matplotlib.dates as mdates # 👈 已完美修复 as 别名漏洞，彻底根除 exit code 2
 from matplotlib.ticker import FixedLocator, FixedFormatter
 
+# 🎯 目标资产
 SYMBOL = "IREN"
 
 def get_macro_weekly_data(symbol):
@@ -37,40 +39,48 @@ def get_macro_weekly_data(symbol):
 def generate_calibrated_tradingview_chart(df):
     df = df.reset_index(drop=True)
     
+    # 💥 建立主副双图布局
     fig, (ax, ax_vol) = plt.subplots(2, 1, figsize=(14, 8.5), facecolor='#ffffff', 
                                     gridspec_kw={'height_ratios': [5.8, 1.2]})
     fig.subplots_adjust(hspace=0.05)
     
+    # ---- 【主图：价格时空矩阵】 ----
     ax.set_facecolor('#ffffff')
     ax.set_yscale('log')
-    ax.yaxis.tick_right()
+    ax.yaxis.tick_right() # 坐标轴严格右置
     ax.yaxis.set_label_position("right")
     
+    # 绘制历史真实黑色粗价格K线趋势
     ax.plot(df['date'], df['close'], color='#111111', linewidth=1.5, label='IREN Close', zorder=3)
     
+    # ⏱️ 时间轴核心锚点
     latest_date = df['date'].iloc[-1]
     w3_date = pd.to_datetime('2025-10-15')
     w4_date = pd.to_datetime('2026-04-15')
+    
+    # 历史大浪黄金锚点
     w3_val = 76.87
     w4_val = 30.76
     
     ax.text(w3_date, w3_val * 1.06, f"③\n${w3_val:.2f}", color='#1A365D', fontsize=10, fontweight='bold', ha='center', va='bottom')
     ax.text(w4_date, w4_val * 0.90, f"④ ${w4_val:.2f}", color='#1A365D', fontsize=10, fontweight='bold', ha='center', va='top')
 
+    # 【固定元素】：右侧 Now 实时标签
     current_price = 56.83
     ax.text(latest_date + timedelta(weeks=1), current_price, f" Now: $56.83 ", color='#ffffff', zorder=5,
             bbox=dict(facecolor='#E74C3C', edgecolor='none', boxstyle='square,pad=0.3'), fontsize=9, fontweight='bold', va='center')
     
+    # 未来时空预测点（月份映射锚点）
     future_weeks = 65 # 拓宽到 2027年中旬，给暴跌留出画布空间
     forecast_dates = [latest_date + timedelta(weeks=i) for i in range(0, future_weeks + 1)]
     x_min = df['date'].iloc[20]
     x_max = forecast_dates[-1] + timedelta(weeks=4)
     
-    t_w3 = latest_date + timedelta(weeks=10)   # 2026年7月
-    t_w4 = latest_date + timedelta(weeks=18)   # 2026年9月
-    t_w5 = latest_date + timedelta(weeks=42)   # 2027年1月 (狂欢顶峰)
+    t_w3 = latest_date + timedelta(weeks=10)   # 2026年7月 (子浪3)
+    t_w4 = latest_date + timedelta(weeks=18)   # 2026年9月 (子浪4)
+    t_w5 = latest_date + timedelta(weeks=42)   # 2027年1月 (宏观浪5大顶)
     
-    # 💥 大跌终极锚点 (A-B-C 熊市杀戮网络)
+    # 💥 大跌终极锚点 (A-B-C 熊市杀戮网络时空落位)
     t_a = t_w5 + timedelta(weeks=8)    # 2027年3月 (A浪初次暴跌跌破点)
     t_b = t_w5 + timedelta(weeks=14)   # 2027年5月 (B浪死猫跳诱多反弹)
     t_c = t_w5 + timedelta(weeks=24)   # 2027年7月 (C浪终极价值归零大底)
@@ -79,62 +89,79 @@ def generate_calibrated_tradingview_chart(df):
     wave_range = w3_val - w4_val
     fib_levels = [0.0, 0.236, 0.382, 0.500, 0.618, 0.786, 1.0]
     fib_colors = ['#7F8C8D', '#95A5A6', '#BDC3C7', '#BDC3C7', '#95A5A6', '#7F8C8D', '#7F8C8D']
+    
     for level, color in zip(fib_levels, fib_colors):
         fib_price = w3_val - (level * wave_range)
         ax.axhline(y=fib_price, color=color, linestyle=':', linewidth=0.5, alpha=0.4, zorder=1)
-        ax.text(pd.to_datetime('2025-08-01'), fib_price * 1.03, f"Fib {level:.3f} (${fib_price:.2f})", color='#95A5A6', fontsize=7.5, alpha=0.6)
+        fib_text = f"Fib {level:.3f} (${fib_price:.2f})"
+        ax.text(pd.to_datetime('2025-08-01'), fib_price * 1.03, fib_text, 
+                color='#95A5A6', fontsize=7.5, va='bottom', ha='left', alpha=0.6)
 
-    # 目标价格标签
+    # 绘制核心目标指导横线
     ax.axhline(y=105.00, color='#1F4E79', linestyle='--', linewidth=0.8, alpha=0.5)
     ax.axhline(y=133.33, color='#2980B9', linestyle='--', linewidth=0.8, alpha=0.5)
     ax.axhline(y=172.00, color='#34495E', linestyle='--', linewidth=0.8, alpha=0.5)
 
+    # 💥 右侧三大目标卡片「时间轴阶梯化平移」
     x_hpq = t_w5 + timedelta(weeks=2)
     x_133 = t_w5 + timedelta(weeks=12)
     x_qtg = t_w5 + timedelta(weeks=22)
     
-    ax.text(x_hpq, 105.00, " HPQ: $105.00 \n(Est: Nov-Dec 2026) ", color='#ffffff', zorder=5, bbox=dict(facecolor='#1F4E79', edgecolor='none'), fontsize=8.5, fontweight='bold', va='center')
-    ax.text(x_133, 133.33, " HPQ-Target: $133.33 \n(Est: Jan 2027 Window) ", color='#ffffff', zorder=5, bbox=dict(facecolor='#2980B9', edgecolor='none'), fontsize=8.5, fontweight='bold', va='center')
-    ax.text(x_qtg, 172.00, " Q-Target: $172.00 \n(Est: Q1 2027 Peak) ", color='#ffffff', zorder=5, bbox=dict(facecolor='#34495E', edgecolor='none'), fontsize=8.5, fontweight='bold', va='center')
+    # 1. 核心 HPQ 校准目标位
+    ax.text(x_hpq, 105.00, " HPQ: $105.00 \n(Est: Nov-Dec 2026) ", color='#ffffff', zorder=5, ha='left',
+            bbox=dict(facecolor='#1F4E79', edgecolor='none', boxstyle='square,pad=0.3'), fontsize=8.5, fontweight='bold', va='center')
+    
+    # 2. 原版经典大浪目标回归位
+    ax.text(x_133, 133.33, " HPQ-Target: $133.33 \n(Est: Jan 2027 Window) ", color='#ffffff', zorder=5, ha='left',
+            bbox=dict(facecolor='#2980B9', edgecolor='none', boxstyle='square,pad=0.3'), fontsize=8.5, fontweight='bold', va='center')
+    
+    # 3. 终极宏观大目标位
+    ax.text(x_qtg, 172.00, " Q-Target: $172.00 \n(Est: Q1 2027 Peak) ", color='#ffffff', zorder=5, ha='left',
+            bbox=dict(facecolor='#34495E', edgecolor='none', boxstyle='square,pad=0.3'), fontsize=8.5, fontweight='bold', va='center')
 
-    # 🟢 绘制多头牛市五浪路径
+    # 🟢 绘制多头牛市五浪上升路径
     wave_x = [mdates.date2num(latest_date), mdates.date2num(t_w3), mdates.date2num(t_w4), mdates.date2num(t_w5)]
-    wave_y_log = [np.log(current_price), np.log(81.50), np.log(64.80), np.log(133.33)] # 以133作为五浪中轴平衡点
+    wave_y_log = [np.log(current_price), np.log(81.50), np.log(64.80), np.log(133.33)]
     poly = np.poly1d(np.polyfit(wave_x, wave_y_log, 2))
     px = np.linspace(mdates.date2num(latest_date), mdates.date2num(t_w5), 40)
     ax.plot(mdates.num2date(px), np.exp(poly(px)), color='#00A3E0', linewidth=2.0, zorder=4, label='Bull Impulse')
 
-    # 🔴 【重磅新增】：绘制 A-B-C 宏观毁灭大暴跌坠落红线
+    # 🔴 绘制 A-B-C 宏观毁灭大暴跌坠落红线
     crash_x = [mdates.date2num(t_w5), mdates.date2num(t_a), mdates.date2num(t_b), mdates.date2num(t_c)]
-    crash_y = [133.33, 68.00, 95.00, 38.00] # A浪腰斩，B浪诱多反弹，C浪终极通杀
+    crash_y = [133.33, 68.00, 95.00, 38.00]
     ax.plot(crash_x, crash_y, color='#E74C3C', linestyle='-', linewidth=2.5, zorder=4, label='Bear Crash Plan')
     
-    # 在红线上打上死亡标记
+    # 标注红线上的危险信号
     ax.text(t_a, 68.00 * 0.90, "⚠️ A 浪暴跌", color='#E74C3C', fontsize=8, fontweight='bold', ha='center', va='top')
     ax.text(t_b, 95.00 * 1.05, "⚠️ B 浪死猫跳", color='#E74C3C', fontsize=8, fontweight='bold', ha='center', va='bottom')
     ax.text(t_c, 38.00 * 0.90, "💀 C 浪大底\n(2027年中)", color='#C0392B', fontsize=8.5, fontweight='bold', ha='center', va='top')
 
+    # 微观子浪高亮
     ax.text(t_w3, 81.50 * 1.12, "(3)\n$81.50\n~Est: Jul 26", color='#2980B9', fontsize=8.5, fontweight='bold', ha='center', va='bottom')
     ax.text(t_w4, 64.80 * 0.82, "(4)\n$64.80\n~Est: Sep 26", color='#2980B9', fontsize=8.5, fontweight='bold', ha='center', va='top')
     
+    # 顶部中央大标题转为红底风控警告
     title_text = "$IREN — Calibrated Quantum Elliott Model (RPF=0.28)\n⚠️ 警告：2027周期性牛熊转换全面合流推演"
     ax.text(0.5, 0.95, title_text, transform=ax.transAxes, fontsize=11, fontweight='bold', color='#ffffff',
             bbox=dict(facecolor='#E74C3C', edgecolor='none', pad=0.4), ha='center', va='top', zorder=5)
 
+    # 纵坐标轴标准对数刻度清洗
     log_ticks = [1.00, 2.30, 5.50, 13.00, 32.00, 38.00, 56.83, 76.87, 105.00, 133.33, 172.00, 250.00]
     ax.yaxis.set_major_locator(FixedLocator(log_ticks))
     ax.yaxis.set_major_formatter(FixedFormatter([f"${t:.2f}" if t in [38.00, 56.83, 105.00, 133.33, 172.00] else f"{int(t)}" for t in log_ticks]))
     
     ax.grid(True, which="both", linestyle=':', color='#E5E5E5', linewidth=0.7)
     ax.set_xticklabels([])
-    ax.set_xlim(x_min, x_max + timedelta(weeks=12))
+    ax.set_xlim(x_min, x_max + timedelta(weeks=12)) 
     ax.set_ylim(0.8, 420.0)
     
-    # 底部成交量
+    # ---- 【副图：底部红绿相间真实成交量】 ----
     ax_vol.set_facecolor('#ffffff')
     ax_vol.yaxis.tick_right()
+    
     colors = ['#2ECC71' if df['close'].iloc[i] >= df['open'].iloc[i] else '#E74C3C' for i in range(len(df))]
     ax_vol.bar(df['date'], df['volume'], width=5.0, color=colors, alpha=0.7, zorder=2)
+    
     ax_vol.grid(True, linestyle=':', color='#E5E5E5', linewidth=0.7)
     ax_vol.xaxis.set_major_formatter(mdates.DateFormatter('%b %y'))
     ax_vol.set_xlim(x_min, x_max + timedelta(weeks=12))
@@ -144,6 +171,7 @@ def generate_calibrated_tradingview_chart(df):
     plt.savefig('iren_quantum_v5.png', dpi=150, bbox_inches='tight')
     plt.close()
 
+# 执行同步覆盖刷新流程
 df = get_macro_weekly_data(SYMBOL)
 if df is not None and not df.empty:
     generate_calibrated_tradingview_chart(df)
@@ -152,7 +180,7 @@ if df is not None and not df.empty:
     wave_range = w3_val - w4_val
     
     report = f"# ⚠️ $IREN 周期性牛熊时空转换警告看板\n\n"
-    report += f"> ⚡ **风控核心红线激活**: 本模型坚决拒绝盲目做多！当前多头延伸浪一旦耗尽，**大级别 A-B-C 崩盘坠落网络将无条件执行**。下表右侧已更新大跌清算窗口。\n\n"
+    report += f"> ⚡ **风控核心红线激活**: 本模型坚决拒绝盲目做多！当前多头延伸浪一旦耗尽，**大级别 A-B-C 崩盘坠落网络将无条件执行**。\n\n"
     report += f"### 📊 现实强化风控因子\n"
     report += f"* **强力警告**：2027年一季度后，禁止任何长线右侧追多行为！\n"
     report += f"* **大周期大底测算**：C浪终极清算中枢直指 **$38.00** 附近。\n\n"
@@ -171,4 +199,4 @@ if df is not None and not df.empty:
     
     with open('README.md', 'w', encoding='utf-8') as f:
         f.write(report)
-    print("✅ 包含熊市大跌 A-B-C 推演的超级风控看板已全线部署！")
+    print("✅ 终极防粘连+双向推演脚本已 100% 语法除错部署就绪！")
