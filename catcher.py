@@ -3,11 +3,10 @@ import sys
 import pandas as pd
 import numpy as np
 import matplotlib
-matplotlib.use('Agg')  # GitHub Actions 无界面环境必须
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
 from datetime import datetime
-import yfinance as yf   # 移到顶部，更稳定
+import yfinance as yf
 
 # ==================== 配置 ====================
 SYMBOL = "IREN"
@@ -16,26 +15,26 @@ RPF = 0.28
 CURRENT_WAVE = "Int Wave (3) impulsive | 2026.10-11 BTC喇叭口共振"
 
 def fetch_latest_data():
-    """实时抓取 IREN 和 BTC 数据"""
+    """实时抓取 IREN 和 BTC 数据（已修复 Series 问题）"""
     print("🔄 正在抓取最新数据...")
     iren_data = yf.download(SYMBOL, period="2y", interval="1d", progress=False)
     btc_data = yf.download("BTC-USD", period="2y", interval="1d", progress=False)
     
-    current_price = round(float(iren_data['Close'].iloc[-1]), 2)
-    btc_price = round(float(btc_data['Close'].iloc[-1]), 0)
+    # 【关键修复】使用 .values[-1] 保证一定是标量
+    current_price = round(float(iren_data['Close'].values[-1]), 2)
+    btc_price = round(float(btc_data['Close'].values[-1]), 0)
     
     print(f"✅ IREN 当前价: ${current_price} | BTC: ${btc_price}")
     return iren_data, btc_data, current_price, btc_price
 
 def generate_calibrated_chart(iren_data, current_price, btc_price):
-    """生成校准后专业图表（完全复刻 ElliottChart 风格）"""
+    """生成校准后专业图表"""
     print("🎨 正在生成校准图表...")
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 9), gridspec_kw={'height_ratios': [3.5, 1]}, sharex=True)
     
-    # 主价格图
     ax1.plot(iren_data.index, iren_data['Close'], color='black', linewidth=2.5, label='IREN Price')
     
-    # 关键历史标注
+    # 历史标注
     ax1.annotate('③ $76.87', xy=(iren_data.index[-300], 76.87), xytext=(10, 10),
                  textcoords='offset points', arrowprops=dict(arrowstyle='->'), fontsize=11, color='blue')
     ax1.annotate('④ $30.76', xy=(iren_data.index[-150], 30.76), xytext=(10, -20),
@@ -46,7 +45,7 @@ def generate_calibrated_chart(iren_data, current_price, btc_price):
                  xytext=(20, -30), textcoords='offset points', fontsize=12, color='red',
                  bbox=dict(boxstyle="round,pad=0.3", facecolor="yellow", alpha=0.9))
     
-    # 校准后目标（RPF=0.28）
+    # 校准目标
     ax1.axhline(y=81.5, color='orange', linestyle='--', linewidth=1.5, alpha=0.8)
     ax1.annotate('(3) $81.50\n(校准后)', xy=(iren_data.index[-1], 81.5), xytext=(20, 10),
                  textcoords='offset points', fontsize=11, color='darkorange')
@@ -59,22 +58,18 @@ def generate_calibrated_chart(iren_data, current_price, btc_price):
     ax1.annotate('极限区 $133', xy=(iren_data.index[-1], 133), xytext=(20, 70),
                  textcoords='offset points', fontsize=11, color='darkred')
     
-    # Q-Structure 模拟射线
     ax1.plot([iren_data.index[-200], iren_data.index[-1]], [44, 105], color='green', linestyle='-', linewidth=1.5, alpha=0.7, label='Q-Structure λ₄ → λ₁')
     
-    # 【已修复】f-string 语法错误
     ax1.set_title(
         f'$IREN — Calibrated Quantum Elliott Model (RPF={RPF})\n'
         f'({CURRENT_WAVE})',
         fontsize=14, 
         fontweight='bold'
     )
-    
     ax1.set_ylabel('Price ($)')
     ax1.grid(True, alpha=0.3)
     ax1.legend()
 
-    # 成交量
     ax2.bar(iren_data.index, iren_data['Volume'], color='lightgreen', alpha=0.7, width=0.8)
     ax2.set_ylabel('Volume')
     ax2.grid(True, alpha=0.3)
