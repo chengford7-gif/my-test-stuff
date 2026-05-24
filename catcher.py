@@ -14,7 +14,7 @@ RPF = 0.28
 
 
 def get_latest_data(symbol):
-    """Fetch recent weekly data for IREN."""
+    """Fetch recent weekly data for IREN. Robust column naming."""
     print("[INFO] Fetching latest weekly data...")
     try:
         df = yf.download(
@@ -28,9 +28,22 @@ def get_latest_data(symbol):
             raise ValueError("Empty data returned from Yahoo Finance")
         
         df = df.reset_index()
-        # Clean column names
+        
+        # Robust column naming for different yfinance/pandas versions
         if isinstance(df.columns, pd.MultiIndex):
-            df.columns = [col[0] for col in df.columns]
+            df.columns = [col[0] if isinstance(col, tuple) else col for col in df.columns]
+        
+        # Ensure first column is named 'Date'
+        first_col = df.columns[0]
+        if first_col != 'Date':
+            df = df.rename(columns={first_col: 'Date'})
+        
+        # Standardize remaining columns if needed
+        expected_cols = ['Date', 'Open', 'High', 'Low', 'Close', 'Volume']
+        if list(df.columns) != expected_cols:
+            # Only rename if we have the right number of columns
+            if len(df.columns) == len(expected_cols):
+                df.columns = expected_cols
         
         return df
     except Exception as e:
