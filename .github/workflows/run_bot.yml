@@ -2,8 +2,8 @@ name: IREN Price Catcher
 
 on:
   schedule:
-    - cron: '0 */4 * * *' # 每 4 小时全自动在后台更新一次首页
-  workflow_dispatch: # 核心：允许你在手机 App 上随时随地手动点击按钮强制冲锋刷新
+    - cron: '0 */4 * * *'
+  workflow_dispatch:
 
 jobs:
   build:
@@ -17,20 +17,19 @@ jobs:
       with:
         python-version: '3.10'
 
-    - name: 极速安装数学与核心绘图依赖
+    - name: 安装量子模型核心数学与绘图依赖
       run: |
         python -m pip install --upgrade pip
         pip install requests pandas numpy matplotlib
 
-    - name: 极速运行形态学狙击
+    - name: 运行量子艾略特模型解构
       run: |
         python3 catcher
 
-    - name: 自动将最新看板和预测图同步回仓库主页
+    - name: 自动将最新看板和复刻风格预测大图同步回仓库主页
       run: |
         git config --global user.name "GitHub Actions Bot"
         git config --global user.email "actions@github.com"
-        # 💥 核心：将本地刷新的主页 README.md 和核心预测大图 iren_matrix.png 一起推回主仓库
         git add README.md iren_matrix.png || true
-        git commit -m "自动更新近代形态学狙击雷达仓库首页看板" || true
+        git commit -m "Quantum Model Projection: 自动同步最新的 TradingView 复刻风格时空看板" || true
         git push
