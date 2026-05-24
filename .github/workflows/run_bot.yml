@@ -3,16 +3,17 @@ name: Update IREN Quantum Model Dashboard
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 0 * * *' # 每天北京时间早8点运行
+    - cron: '0 0 * * *' # 每天 UTC 时间 0点运行
 
 jobs:
   build-and-update:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: write # 必须赋予写入权限
 
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -22,7 +23,7 @@ jobs:
     - name: Install Dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install requests pandas numpy matplotlib
+        pip install requests pandas matplotlib numpy
 
     - name: Run Script
       run: |
@@ -33,9 +34,9 @@ jobs:
         git config --global user.name 'github-actions[bot]'
         git config --global user.email 'github-actions[bot]@users.noreply.github.com'
         
-        # 强制添加这两个文件
+        # 添加文件，即使图片没变，README.md 的时间戳变了，git 也会提交
         git add iren_quantum_v5.png README.md
         
-        # 即使只有 README 时间变了，也能提交成功
-        git commit -m "Auto-Update: IREN Quantum Dashboard $(date +'%Y-%m-%d %H:%M:%S')"
+        # 提交更新
+        git commit -m "Auto-Update: IREN Quantum Dashboard $(date +'%Y-%m-%d')" || echo "No changes to commit"
         git push
